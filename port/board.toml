@@ -1,0 +1,47 @@
+# Platform-stage device port for Redmi K30 4G (phoenix, SM7150).
+# Read docs/hardware-facts.md and NOTES.md before building a phone image.
+[board]
+name = "phoenix"
+soc = "SM7150"
+description = "Xiaomi Redmi K30 4G"
+kit = "phoenix"
+
+[kernel]
+defconfig = "phoenix_defconfig"
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "build-arm-driver.py ArmDTPlatform",
+  "build-arm-driver.py ArmCpu",
+  "build-libpthread-kernel.py",
+]
+
+[payload]
+volume = "PHOENIXESP"
+size_mib = 96
+loader = "firmware"
+title = "phoenix: UniXNU platform bring-up"
+# Conservative 6 GiB-class upper bank. Override after measuring the phone.
+dram_size = "0xfcc00000"
+panic_screen = false
+kernel_args = ["-v", "serial=3", "debug=0x14e", "kt_fixed_zones=120", "cpus=1", "armcpu-self-ipi=1"]
+
+[payload.adt]
+tool = "scripts/make-phoenix-adt.py"
+owned_memory_size = "0x40000000"
+cpu_regs = "0,0x100,0x200,0x300,0x400,0x500,0x600,0x700"
+psci_method = "smc"
+
+[port]
+stage = "platform"
+hardware_tested = false
+# Firmware path: this port is meant to run under the project's own Mu-Silicium
+# phoenix build (UFSDxe and PILDxe removed, UniXNU payload embedded in the FV),
+# booted with `fastboot boot`, never flashed. No prelink target, userdata
+# geometry or Apple identity has been qualified.
+notes = """
+UEFI side lives in mu-silicium/Platforms/Xiaomi/phoenixPkg.
+UniXNURamDiskDxe publishes the payload FAT either from the FDT initrd
+properties, from a DRAM scan for the UNIXNU00 signature, or from an embedded
+FV section - whichever is available first.
+"""

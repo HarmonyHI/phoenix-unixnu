@@ -1,0 +1,17 @@
+# build output
+out/
+Build/
+*.img
+*.fd
+*.efi
+*.fat
+*.adt
+*.dtb
+*.o
+*.dylib
+*.a
+__pycache__/
+*.pyc
+
+# host noise
+.DS_Store

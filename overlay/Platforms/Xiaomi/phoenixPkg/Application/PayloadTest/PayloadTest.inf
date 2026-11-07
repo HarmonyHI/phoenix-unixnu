@@ -1,0 +1,28 @@
+##
+#  Minimal embedded UEFI payload for the phoenix port.
+#  Proves the FV-to-application launch channel; stepping stone to UniXNU.
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010018
+  BASE_NAME                      = PayloadTest
+  FILE_GUID                      = 8E2A7E24-6E8E-4B3F-9C0D-1A2B3C4D5E6F
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = PayloadTestEntryPoint
+
+[Sources]
+  PayloadTest.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiLib
+  DebugLib
+  MemoryAllocationLib
+
+[Protocols]
+  gEfiSimpleFileSystemProtocolGuid

@@ -1,0 +1,36 @@
+## @file
+#  phoenix ADT inspector payload: reads \EFI\UniXNU\phoenix.adt from the
+#  published payload volume and validates its structure on screen.
+#
+#  Copyright (c) 2026, UniXNU contributors. All rights reserved.
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION    = 0x00010019
+  BASE_NAME      = ADTInspector
+  FILE_GUID      = E77B3C41-89DF-424C-949B-6E7689072552
+  MODULE_TYPE    = UEFI_APPLICATION
+  VERSION_STRING = 0.1
+  ENTRY_POINT    = AdtInspectorEntry
+
+[Sources]
+  ADTInspector.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+
+[LibraryClasses]
+  BaseLib
+  BaseMemoryLib
+  MemoryAllocationLib
+  PrintLib
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiLib
+
+[Guids]
+  gEfiFileInfoGuid           ## CONSUMES
+
+[Protocols]
+  gEfiSimpleFileSystemProtocolGuid  ## CONSUMES

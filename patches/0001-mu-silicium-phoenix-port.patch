@@ -1,0 +1,394 @@
+diff --git a/Platforms/Xiaomi/phoenixPkg/DeviceBuild.py b/Platforms/Xiaomi/phoenixPkg/DeviceBuild.py
+index d4e12080..53e5224f 100644
+--- a/Platforms/Xiaomi/phoenixPkg/DeviceBuild.py
++++ b/Platforms/Xiaomi/phoenixPkg/DeviceBuild.py
+@@ -38,7 +38,8 @@ class CommonPlatform ():
+         "Silicon/Silicium",
+         "Silicium-ACPI",
+         "Silicium-ACPI/Platforms/Xiaomi",
+-        "Silicium-ACPI/Silicon/Qualcomm"
++        "Silicium-ACPI/Silicon/Qualcomm",
++        "UniXNU"
+     )
+ 
+ # ####################################################################################### #
+diff --git a/Platforms/Xiaomi/phoenixPkg/Include/APRIORI.inc b/Platforms/Xiaomi/phoenixPkg/Include/APRIORI.inc
+index 1e9c1ee3..434819c7 100644
+--- a/Platforms/Xiaomi/phoenixPkg/Include/APRIORI.inc
++++ b/Platforms/Xiaomi/phoenixPkg/Include/APRIORI.inc
+@@ -32,7 +32,7 @@ APRIORI DXE {
+   INF MdeModulePkg/Universal/Disk/UnicodeCollation/EnglishDxe/EnglishDxe.inf
+ 
+   INF Binaries/phoenix/QcomPkg/Drivers/SdccDxe/SdccDxe.inf
+-  INF Binaries/phoenix/QcomPkg/Drivers/UFSDxe/UFSDxe.inf
++  # INF Binaries/phoenix/QcomPkg/Drivers/UFSDxe/UFSDxe.inf
+ 
+   INF FatPkg/EnhancedFatDxe/Fat.inf
+ 
+diff --git a/Platforms/Xiaomi/phoenixPkg/Include/DXE.inc b/Platforms/Xiaomi/phoenixPkg/Include/DXE.inc
+index d41ba204..8e9f26ec 100644
+--- a/Platforms/Xiaomi/phoenixPkg/Include/DXE.inc
++++ b/Platforms/Xiaomi/phoenixPkg/Include/DXE.inc
+@@ -53,7 +53,7 @@
+   INF Binaries/phoenix/QcomPkg/Drivers/I2CDxe/I2CDxe.inf
+   INF Binaries/phoenix/QcomPkg/Drivers/SPMIDxe/SPMIDxe.inf
+   INF Binaries/phoenix/QcomPkg/Drivers/SdccDxe/SdccDxe.inf
+-  INF Binaries/phoenix/QcomPkg/Drivers/UFSDxe/UFSDxe.inf
++  # INF Binaries/phoenix/QcomPkg/Drivers/UFSDxe/UFSDxe.inf
+   INF Binaries/phoenix/QcomPkg/Drivers/TLMMDxe/TLMMDxe.inf
+   INF Binaries/phoenix/QcomPkg/Drivers/AW8624Dxe/AW8624Dxe.inf
+ 
+@@ -88,5 +88,5 @@
+ 
+   INF MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
+ 
+-  INF Binaries/phoenix/QcomPkg/Drivers/PILDxe/PILDxe.inf
++  # INF Binaries/phoenix/QcomPkg/Drivers/PILDxe/PILDxe.inf
+   INF Binaries/phoenix/QcomPkg/Drivers/ShmBridgeDxe/ShmBridgeDxeLA.inf
+diff --git a/Platforms/Xiaomi/phoenixPkg/Library/MemoryMapLib/MemoryMapLib.c b/Platforms/Xiaomi/phoenixPkg/Library/MemoryMapLib/MemoryMapLib.c
+index f394b2c0..4e5435ac 100644
+--- a/Platforms/Xiaomi/phoenixPkg/Library/MemoryMapLib/MemoryMapLib.c
++++ b/Platforms/Xiaomi/phoenixPkg/Library/MemoryMapLib/MemoryMapLib.c
+@@ -17,7 +17,7 @@ gMemoryDescriptor[] = {
+   {"SMEM",               0x86000000, 0x00200000, AddMem, MEM_RES, WRITE_COMBINEABLE, Reserv, UNCACHED_UNBUFFERED},
+   {"QTEE",               0x86200000, 0x00B00000, AddMem, MEM_RES, UNCACHEABLE, Reserv, UNCACHED_UNBUFFERED_XN},
+   {"TZApps",             0x86D00000, 0x03E00000, AddMem, MEM_RES, UNCACHEABLE, Reserv, UNCACHED_UNBUFFERED_XN},
+-  {"PIL_REGION",         0x8AB00000, 0x0DA00000, AddMem, SYS_MEM, SYS_MEM_CAP, Reserv, UNCACHED_UNBUFFERED_XN},
++  {"PIL_REGION",         0x8AB00000, 0x0DA00000, AddMem, SYS_MEM, SYS_MEM_CAP, Reserv, WRITE_BACK_XN},
+   {"Display Reserved",   0x9C000000, 0x01800000, AddMem, MEM_RES, SYS_MEM_CAP, Reserv, WRITE_THROUGH_XN},
+   {"ADSP RPC",           0x9D800000, 0x00C00000, AddMem, MEM_RES, UNCACHEABLE, Reserv, UNCACHED_UNBUFFERED_XN},
+   {"TGCM",               0x9E400000, 0x01400000, AddMem, MEM_RES, WRITE_COMBINEABLE, Reserv, UNCACHED_UNBUFFERED_XN},
+diff --git a/Platforms/Xiaomi/phoenixPkg/phoenix.dsc b/Platforms/Xiaomi/phoenixPkg/phoenix.dsc
+index c0cfd1f0..358c0120 100644
+--- a/Platforms/Xiaomi/phoenixPkg/phoenix.dsc
++++ b/Platforms/Xiaomi/phoenixPkg/phoenix.dsc
+@@ -83,8 +83,56 @@
+   #
+   ConfigurationMapLib|phoenixPkg/Library/ConfigurationMapLib/ConfigurationMapLib.inf
+ 
++  #
++  # ShellPkg libraries (for the embedded UEFI Shell payload)
++  #
++  ShellLib|ShellPkg/Library/UefiShellLib/UefiShellLib.inf
++  ShellCommandLib|ShellPkg/Library/UefiShellCommandLib/UefiShellCommandLib.inf
++  HandleParsingLib|ShellPkg/Library/UefiHandleParsingLib/UefiHandleParsingLib.inf
++  BcfgCommandLib|ShellPkg/Library/UefiShellBcfgCommandLib/UefiShellBcfgCommandLib.inf
++
++  #
++  # UniXNU libraries
++  #
++  UniXNULib|UniXNUPkg/Library/UniXNULib/UniXNULib.inf
++
+ [Components]
+   #
+   # ACPI Tables
+   #
+   #phoenix/AcpiTables.inf
++
++  #
++  # UEFI Shell (embedded payload, used to test interactive console)
++  #
++  ShellPkg/Application/Shell/Shell.inf
++
++  #
++  # Minimal embedded payload (FV launch channel test, steps towards UniXNU)
++  #
++  phoenixPkg/Application/PayloadTest/PayloadTest.inf
++
++  #
++  # UniXNU — boot menu, firmware boot option registrar, RAM disk publisher
++  #
++  UniXNUPkg/Application/UniXNU/UniXNU.inf
++  UniXNUPkg/Driver/UniXNUDxe/UniXNUDxe.inf
++  UniXNUPkg/Driver/UniXNURamDiskDxe/UniXNURamDiskDxe.inf
++
++  #
++  # HelloPayload — built only so it can be dropped into the payload FAT and
++  # prove the "type = efi" path end to end. It is deliberately not in the FDF.
++  #
++  UniXNUPkg/Test/HelloPayload/HelloPayload.inf
++
++  #
++  # ADTInspector — reads \EFI\UniXNU\phoenix.adt back from the published
++  # payload volume and validates it on screen. Built like HelloPayload and
++  # likewise kept out of the FDF.
++  #
++  UniXNUPkg/Test/ADTInspector/ADTInspector.inf
++
++  #
++  # DarwinBoot — XNU loader (implements gUniXNULoaderProtocolGuid)
++  #
++  DarwinBootPkg/Driver/DarwinBoot.inf
+diff --git a/Platforms/Xiaomi/phoenixPkg/phoenix.fdf b/Platforms/Xiaomi/phoenixPkg/phoenix.fdf
+index f7a0b9d8..c55e84b9 100644
+--- a/Platforms/Xiaomi/phoenixPkg/phoenix.fdf
++++ b/Platforms/Xiaomi/phoenixPkg/phoenix.fdf
+@@ -86,6 +86,32 @@ READ_LOCK_STATUS   = TRUE
+   # RAM Manager
+   INF SiliciumPkg/Drivers/RamManagerDxe/RamManagerDxe.inf
+ 
++  # UEFI Shell (embedded payload for testing console / loading EFI apps)
++  INF ShellPkg/Application/Shell/Shell.inf
++
++  # Minimal embedded payload (FV launch channel test, steps towards UniXNU)
++  INF phoenixPkg/Application/PayloadTest/PayloadTest.inf
++
++  # UniXNU boot menu + firmware integration + RAM disk publisher
++  INF UniXNUPkg/Application/UniXNU/UniXNU.inf
++  INF UniXNUPkg/Driver/UniXNUDxe/UniXNUDxe.inf
++  INF UniXNUPkg/Driver/UniXNURamDiskDxe/UniXNURamDiskDxe.inf
++
++  #
++  # Payload FAT carried inside the firmware itself, compressed (a 4 MiB image
++  # of mostly zeros costs a few KiB here). UniXNURamDiskDxe publishes it when
++  # the bootloader did not hand a ramdisk over, so the payload chain no longer
++  # depends on how ABL treats the boot image's ramdisk.
++  #
++  FILE FREEFORM = 6A1D2C33-8E4F-4B7A-9C21-2D5B6E8F0A17 {
++    SECTION COMPRESS PI_STD {
++      SECTION RAW = phoenixPkg/Payload/payload.fat
++    }
++  }
++
++  # DarwinBoot — XNU loader
++  INF DarwinBootPkg/Driver/DarwinBoot.inf
++
+   # SmBios
+   INF MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf
+   INF SiliciumPkg/Drivers/SmBiosTableDxe/SmBiosTableDxe.inf
+diff --git a/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c b/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c
+index fdf407b8..ee6b3363 100644
+--- a/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c
++++ b/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c
+@@ -7,6 +7,7 @@
+ 
+ #include <Library/PcdLib.h>
+ #include <Library/DebugLib.h>
++#include <Library/DxeServicesLib.h>
+ #include <Library/AcpiTableUpdateLib.h>
+ #include <Library/DeviceBootManagerLib.h>
+ #include <Library/PlatformBootManagerLib.h>
+@@ -18,6 +19,8 @@
+ #include <Library/BootGraphicsLib.h>
+ #include <Library/BootGraphics.h>
+ #include <Library/PrintLib.h>
++#include <Library/HobLib.h>
++#include <Library/FdtLib.h>
+ 
+ #include <Configuration/BootDevices.h>
+ 
+@@ -29,6 +32,129 @@
+ STATIC UINTN XPos = 0;
+ STATIC UINTN YPos = 0;
+ 
++//
++// Embedded payload application GUID (UniXNUPkg/Application/UniXNU)
++//
++STATIC CONST EFI_GUID mShellFileGuid = {
++  0x9B665204, 0xA133, 0x47A2, { 0x93, 0x96, 0x9E, 0x2B, 0x37, 0x0A, 0x4E, 0x25 }
++};
++
++//
++// Mu-Silicium SEC entry-argument HOB (incoming x0 = FDT address)
++//
++STATIC CONST EFI_GUID mEntryArgHobGuid = {
++  0xDAEE82E6, 0x8090, 0x4E72, { 0xBF, 0xB9, 0x78, 0xC1, 0x3C, 0xD4, 0xE3, 0x59 }
++};
++
++//
++// Dump the FDT handoff state so a single screen photo shows where the
++// bootloader's device tree and the initrd payload actually live.
++//
++STATIC
++VOID
++DumpFdtDiagnostics (
++  VOID
++  )
++{
++  EFI_HOB_GUID_TYPE  *Hob;
++  UINT64             Dtb;
++  CONST VOID         *Fdt;
++  INT32              Chosen;
++  CONST VOID         *StartProp;
++  CONST VOID         *EndProp;
++  INT32              Len;
++  UINT64             Start;
++  UINT64             End;
++  UINT64             Addr;
++  UINTN              Found;
++  UINT8              *P;
++
++  Hob = GetFirstGuidHob (&mEntryArgHobGuid);
++  if (Hob == NULL) {
++    DEBUG ((DEBUG_ERROR, "PHXFD: no entry argument HOB\n"));
++  } else {
++    Dtb = ReadUnaligned64 ((CONST UINT64 *)GET_GUID_HOB_DATA (Hob));
++    DEBUG ((DEBUG_ERROR, "PHXFD: x0 (dtb) = 0x%016lx\n", Dtb));
++
++    Fdt = (CONST VOID *)(UINTN)Dtb;
++    if ((Dtb != 0) && ((Dtb & 3) == 0) && (FdtCheckHeader (Fdt) == 0)) {
++      DEBUG ((DEBUG_ERROR, "PHXFD: dtb ok, %u bytes\n", (UINT32)FdtTotalSize (Fdt)));
++      Chosen = FdtPathOffset (Fdt, "/chosen");
++      DEBUG ((DEBUG_ERROR, "PHXFD: /chosen offset = %d\n", Chosen));
++      if (Chosen >= 0) {
++        StartProp = FdtGetProp (Fdt, Chosen, "linux,initrd-start", &Len);
++        EndProp   = FdtGetProp (Fdt, Chosen, "linux,initrd-end", &Len);
++        if ((StartProp == NULL) || (EndProp == NULL)) {
++          DEBUG ((DEBUG_ERROR, "PHXFD: NO initrd props in /chosen\n"));
++        } else {
++          Start = Fdt64ToCpu (ReadUnaligned64 (StartProp));
++          End   = Fdt64ToCpu (ReadUnaligned64 (EndProp));
++          DEBUG ((DEBUG_ERROR, "PHXFD: initrd 0x%lx - 0x%lx (len 0x%lx)\n", Start, End, End - Start));
++          if ((Start != 0) && (End > Start)) {
++            P = (UINT8 *)(UINTN)Start;
++            DEBUG ((DEBUG_ERROR, "PHXFD: initrd head %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
++                    P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], P[8], P[9], P[10]));
++          }
++        }
++      }
++    } else {
++      DEBUG ((DEBUG_ERROR, "PHXFD: x0 is NOT a valid device tree\n"));
++    }
++  }
++
++  //
++  // Scan DRAM for the FAT payload signature ("UNIXNU00" OEM name at offset 3
++  // of the boot sector) to locate where the bootloader actually placed the
++  // ramdisk. Only probe mapped DRAM ranges — the gaps between them
++  // (0x84920000-0x85700000 and 0x98500000-0x9C000000) are unmapped and a
++  // read there would raise a data abort.
++  //
++  STATIC CONST UINT64  ScanRanges[][2] = {
++    { 0x80000000, 0x80600000 },  // Kernel
++    { 0x80600000, 0x81320000 },  // DBI Dump
++    { 0x81320000, 0x84920000 },  // DXE Heap
++    { 0x85700000, 0x86000000 },  // HYP .. GPU PRR
++    { 0x86200000, 0x98500000 },  // QTEE .. PIL_REGION end
++    { 0x9C000000, 0x9F800000 },  // Display Reserved .. TGCM end
++  };
++
++  Found = 0;
++  for (UINTN Range = 0; Range < ARRAY_SIZE (ScanRanges); Range++) {
++    for (Addr = ScanRanges[Range][0]; (Addr + 512) < ScanRanges[Range][1]; Addr += 512) {
++      P = (UINT8 *)(UINTN)Addr;
++      if ((P[3] == 'U') && (P[4] == 'N') && (P[5] == 'I') && (P[6] == 'X') &&
++          (P[7] == 'N') && (P[8] == 'U') && (P[9] == '0') && (P[10] == '0'))
++      {
++        DEBUG ((DEBUG_ERROR, "PHXFD: UNIXNU00 FAT at 0x%016lx\n", Addr));
++        if (++Found >= 8) {
++          break;
++        }
++      }
++    }
++
++    if (Found >= 8) {
++      break;
++    }
++  }
++
++  if (Found == 0) {
++    DEBUG ((DEBUG_ERROR, "PHXFD: no UNIXNU00 signature found in DRAM scan\n"));
++  }
++
++  //
++  // Also peek at the address we asked the bootloader to use.
++  //
++  P = (UINT8 *)(UINTN)0x8AB00000;
++  DEBUG ((DEBUG_ERROR, "PHXFD: [0x8AB00000] = %02x %02x %02x %02x %02x %02x %02x %02x\n",
++          P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7]));
++
++  //
++  // Give the operator time to photograph the screen before the log scrolls on.
++  //
++  gBS->Stall (8000000);
++}
++
++
+ //
+ // BDS Combo Message
+ //
+@@ -95,6 +221,43 @@ PostGopSetup (OUT EFI_GRAPHICS_OUTPUT_PROTOCOL **GopProtocol)
+   *GopProtocol = LocalGopProtocol;
+ }
+ 
++/**
++  Launch an embedded UEFI application from the firmware volume.
++
++  This bypasses the boot-option / variable-store machinery entirely, which is
++  required on devices that have no persistent variable storage or no block
++  storage at all (e.g. while UFS is not functional).
++**/
++STATIC
++VOID
++LaunchEmbeddedPayload (
++  IN CONST EFI_GUID  *FileGuid,
++  IN CONST CHAR8     *Name
++  )
++{
++  EFI_STATUS  Status;
++  VOID        *Buffer = NULL;
++  UINTN       Size    = 0;
++  EFI_HANDLE  Handle  = NULL;
++
++  Status = GetSectionFromAnyFv ((EFI_GUID *)FileGuid, EFI_SECTION_PE32, 0, &Buffer, &Size);
++  if (EFI_ERROR (Status)) {
++    DEBUG ((DEBUG_ERROR, "PHX: %a not found in FV (%r), skipping\n", Name, Status));
++    return;
++  }
++
++  DEBUG ((DEBUG_ERROR, "PHX: launching %a (size=0x%lx)\n", Name, (UINT64)Size));
++
++  Status = gBS->LoadImage (TRUE, gImageHandle, NULL, Buffer, Size, &Handle);
++  if (EFI_ERROR (Status)) {
++    DEBUG ((DEBUG_ERROR, "PHX: LoadImage(%a) failed: %r\n", Name, Status));
++    return;
++  }
++
++  Status = gBS->StartImage (Handle, NULL, NULL);
++  DEBUG ((DEBUG_ERROR, "PHX: %a returned: %r\n", Name, Status));
++}
++
+ VOID
+ EFIAPI
+ PlatformBootManagerAfterConsole ()
+@@ -105,12 +268,19 @@ PlatformBootManagerAfterConsole ()
+   // Post Setup GOP
+   PostGopSetup (&GopProtocol);
+ 
++  // Dump FDT / initrd handoff diagnostics (one screen, right before payload)
++  DumpFdtDiagnostics ();
++
+   // Display Boot Logo
+   Status = DisplayBootGraphic (BG_SYSTEM_LOGO);
+   if (EFI_ERROR (Status)) {
+     DEBUG ((EFI_D_ERROR, "%a: Failed to Display Boot Logo! Status = %r\n", __FUNCTION__, Status));
+   }
+ 
++  // Launch the embedded UEFI Shell as a payload, so this device can reach an
++  // interactive console without any dependency on storage or NV variables.
++  LaunchEmbeddedPayload (&mShellFileGuid, "UniXNU");
++
+   // Register Key Callback
+   Status = RegisterKeyCallback ((EFI_DEVICE_PATH_PROTOCOL *)&KeypadDevicePath);
+   if (!EFI_ERROR (Status) && GopProtocol != NULL) {
+diff --git a/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManagerLib.inf b/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManagerLib.inf
+index 2310dc61..2fa74c67 100644
+--- a/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManagerLib.inf
++++ b/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManagerLib.inf
+@@ -27,6 +27,7 @@
+ [LibraryClasses]
+   PcdLib
+   DebugLib
++  DxeServicesLib
+   AcpiTableUpdateLib
+   DeviceBootManagerLib
+   UefiRuntimeServicesTableLib
+@@ -37,6 +38,8 @@
+   BootGraphicsLib
+   DevicePathLib
+   PrintLib
++  HobLib
++  FdtLib
+ 
+ [Pcd]
+   gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut
