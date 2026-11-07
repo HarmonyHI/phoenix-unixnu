@@ -64,7 +64,7 @@ overlay/                      Mu-Silicium 里的**新增**源码，保持原相�
   Resources/Scripts/            mkfat.py / checkfat.py / build-phoenix.sh / mkinitrd.sh
 patches/
   0001-mu-silicium-phoenix-port.patch       对已跟踪文件的改动（dsc/fdf/APRIORI/MemoryMapLib/BootManager 等）
-  0002-mu-basecore-flatten-pdbs-and-dump.patch  Mu_Basecore：FlattenPdbs 跳过开关 + 精简 AArch64 异常 dump（去 V 寄存器、栈窗口 16→4 行，让 PC 模块符号化留在屏幕内）
+  0002-mu-basecore-flatten-pdbs-and-dump.patch  Mu_Basecore 的 12 个文件（详见下方说明）
 dts/                          MiCode phoenix-r-oss 设备树（SoC / 面板 / 触控 / pinctrl）
 scripts/apply-to-mu-silicium.sh 把 overlay + 补丁落到干净的上游树
 ```
@@ -78,7 +78,7 @@ scripts/apply-to-mu-silicium.sh 把 overlay + 补丁落到干净的上游树
 git clone https://github.com/Project-Silicium/Mu-Silicium.git mu-silicium
 git -C mu-silicium checkout 8471e47f5248ebbffc2e6196b683204163efe155
 git -C mu-silicium submodule update --init --recursive   # Mu_Basecore @ 64f4789
-# Mu_Basecore 里另有一处本地改动（BootManagerMenu / UsbBus / Gcd / ArmMmuLib 等），不属于本仓库
+# Mu_Basecore 侧的改动见 patches/0002（不含本机专属的临时探针，见"刻意排除的东西"）
 
 # 2. 落地本仓库的内容
 git clone https://github.com/HarmonyHI/phoenix-unixnu.git
@@ -110,6 +110,14 @@ python3 port/scripts/make-phoenix-adt.py --output out/phoenix.adt --dram-size 0x
 | `phoenix-trimmed.dtb`、`phoenix-debug-kernel`、`out/phoenix.adt` | 二进制中间产物 |
 | `unixnu/` 上游源码树（24 MB） | 有独立上游，克隆即得；本仓库只留对它的移植结论 |
 | `UniXNU-sweet-main/`、`UniXNU-picasso-main/` | 第三方端口参考，不属于本次工作 |
+| Mu_Basecore 里 6 处临时探针（`P0`–`P5`、`GSA … ra=…`） | 黑屏排查时插的噪音打印，只在 `ArmMmuLibCore.c` / `CpuMmuCommon.c` / `Gcd.c`，不进补丁 |
+| `BaseTools/Bin/{basetoolsbin,nasm}_ext_dep.yaml` 的删除 | 本机改用已装工具的副作用；别人的 `stuart update` 还要靠它拉 basetools |
+
+所以 `patches/0002-mu-basecore-flatten-pdbs-and-dump.patch` 只保留 12 个文件的实质改动：
+FlattenPdbs 跳过开关、精简 AArch64 异常 dump（去 V 寄存器、栈窗口 16→4 行，让 PC 模块符号化留在屏幕内）、
+timer 频率的 PCD 回退、BootManagerMenu 的 Power Off / Exit 与配色、UsbBus 的 TPL 调整、
+AuthVariable 运行时写保护、ShellLib 构造期 `EFI_NOT_FOUND` 容忍。补丁用 `git apply --check -R`
+对当前工作树反向验证过，与工作树逐字节一致。
 
 ## 踩过的坑（摘要，细节见 `docs/notes-infeasible-routes.md`）
 
