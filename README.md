@@ -21,23 +21,24 @@ fastboot boot boot.img
 | 项目 | 状态 |
 | --- | --- |
 | UEFI 固件在真机启动 | ✅ 已上机：`fastboot boot` 后出 UniXNU 菜单（Apple logo、`v0.1.0`），有照片留证 |
-| FAT 载荷卷 | ✅ 已内嵌进固件 FV（FFS FREEFORM + Tiano 压缩段），绕开 ABL 是否放置 ramdisk 的不确定性 |
+| FAT 载荷卷 | ✅ 已内嵌进固件 FV（FFS FREEFORM + Tiano 压缩段），运行时 `ReadSection` 解出 4 MiB 并验证 `size 4194304` |
 | FAT 镜像合法性 | ✅ `fsck_msdos` 干净；`checkfat.py` 按 FatPkg 语义逐项复核（几何、FAT 类型、双 FAT、LFN 校验和与顺序、簇链、大小写不敏感路径） |
-| BlockIo → DiskIo → SimpleFileSystem 链路 | ✅ 已实现；BlockIo 发布后主动 `ConnectController` 才会挂上 FAT |
-| 从 OS 内部读回 `\EFI\UniXNU\phoenix.adt` | ⏳ **待上机确认**（`Mu-phoenix-adt.img` 已构建，5,302,272 B） |
+| BlockIo → DiskIo → SimpleFileSystem 链路 | ✅ 已上机验证：`Installed Fat fileSystem` → `ConnectController Success` → `1 SimpleFileSystem handle(s)` |
+| 从 OS 内部读回 `\EFI\UniXNU\phoenix.adt` | ✅ **已上机确认**（2026-11-07，`Mu-phoenix-fv6.img`）：`config FOUND`（unixnu.toml）+ ADTInspector 6 项全过 |
 | ADT 生成器 / 校验器 / 回归测试 | ✅ 生成 12 KiB ADT；校验器 8 条不变量；`tests/test-adt.py` 6/6 通过（含 3 个负向用例） |
 | 真实 DRAM 上界 | ⚠️ 暂用保守值 `0xFCC00000`，需 `adb shell cat /proc/meminfo` 拿真值后重新生成 |
 | XNU 内核本体 | ❌ 未构建：需要 Xcode 26.2、Apple 源码投放、以及与本机 iOS 版本匹配的 kernelcache 做 prelink |
 | 显示 / 触控 / UFS / GPU | ❌ 未开始 |
 
-期望的上机输出（`ADTInspector`）：
+上机实测输出（2026-11-07，`Mu-phoenix-fv6.img`）：
 
 ```
-UNIXNU-ADT: read 12288 bytes from \EFI\UniXNU\phoenix.adt
-UNIXNU-ADT: check file PASS (...)
-UNIXNU-ADT: check parse PASS (...)
+UNIXNU-ADT: phoenix ADT inspector
+UNIXNU-ADT: read 12368 bytes from \EFI\UniXNU\phoenix.adt
+UNIXNU-ADT: check file PASS (phoenix.adt present on the payload volume)
+UNIXNU-ADT: check parse PASS (12368 bytes consumed of 12368)
 UNIXNU-ADT: check model PASS (model 'phoenix-platform-bringup')
-UNIXNU-ADT: check dram PASS (dram 100000000 + fcc00000 (owned 40000000))
+UNIXNU-ADT: check dram PASS (dram 100000000 + FCC00000 (owned 40000000))
 UNIXNU-ADT: check product PASS (product 'Redmi K30 4G')
 UNIXNU-ADT: check cpus PASS (8 cpu nodes)
 UNIXNU-ADT: RESULT PASS 6 passed 0 failed
@@ -62,8 +63,8 @@ overlay/                      Mu-Silicium 里的**新增**源码，保持原相�
   Platforms/Xiaomi/phoenixPkg/Application/PayloadTest/
   Resources/Scripts/            mkfat.py / checkfat.py / build-phoenix.sh / mkinitrd.sh
 patches/
-  0001-mu-silicium-phoenix-port.patch   对已跟踪文件的改动（253 行：dsc/fdf/APRIORI/MemoryMapLib/BootManager）
-  0002-mu-basecore-flatten-pdbs-gate.patch  EDK2 插件开关，允许跳过 PDB flatten
+  0001-mu-silicium-phoenix-port.patch       对已跟踪文件的改动（dsc/fdf/APRIORI/MemoryMapLib/BootManager 等）
+  0002-mu-basecore-flatten-pdbs-and-dump.patch  Mu_Basecore：FlattenPdbs 跳过开关 + 精简 AArch64 异常 dump（去 V 寄存器、栈窗口 16→4 行，让 PC 模块符号化留在屏幕内）
 dts/                          MiCode phoenix-r-oss 设备树（SoC / 面板 / 触控 / pinctrl）
 scripts/apply-to-mu-silicium.sh 把 overlay + 补丁落到干净的上游树
 ```
@@ -119,6 +120,10 @@ python3 port/scripts/make-phoenix-adt.py --output out/phoenix.adt --dram-size 0x
 5. **UEFI Shell 不能当载荷** —— `ShellLibConstructor` 在任何协议安装前就 assert。专用小程序更小更可控。
 6. **FDT 二进制解析容易错位** —— token 常量实际是 `BEGIN=1 / END=2 / PROP=3 / NOP=4 / END_NODE=9`，节点名为空时必须按 4 字节对齐。
 7. **`mkfat.py` 三个隐蔽 bug** —— 没调用 LFN 写入（`unixnu.toml` 变成 `UNIXNU.TOM`）、FAT[0] 写成 FAT12 的 `0xF8FF`、`--add DIR=HOST` 的斜杠被当文件名。已重写并配 `checkfat.py`。
+8. **boot image 必须在 gzip 内核后追加 DTB** —— 打包脚本丢了这一步后，SEC 拿不到设备树，症状是孤零零一行 `splitting block entry with MMU disabled` 然后复位回系统。`mkinitrd.sh` 现在硬检查 DTB。
+9. **`EFI_FIRMWARE_VOLUME2_PROTOCOL.GetNextFile` 的 `FileType` 是输入过滤** —— 不初始化为 0（`EFI_FV_FILETYPE_ALL`）就按栈垃圾过滤，循环一次就 `EFI_NOT_FOUND`，表现为"固件里没有载荷"。
+10. **`GetNextFile` 的 `Key` 必须是 `UINTN` 大小** —— 实现按 8 字节读写，传 `UINT32` 会让高 4 字节栈垃圾被当链表指针解引用（data abort / translation fault，`FAR=0`）。
+11. **BDS 阶段扫 DRAM 会挂死总线** —— `0x85700000-0x86000000`（HYP）与 `0x86200000-0x98500000`（QTEE/PIL）读一下就静默冻屏（连 data abort 都不来）。所有早期诊断只碰已映射区间，或者干脆别扫。
 
 ## 硬件事实速查
 
@@ -144,7 +149,7 @@ python3 port/scripts/make-phoenix-adt.py --output out/phoenix.adt --dram-size 0x
 
 ## 下一步
 
-1. 上机跑 `Mu-phoenix-adt.img`，拍下 `UNIXNU-ADT:` 那一段 —— 无论 PASS 还是 FAIL，"载荷卷可读"这个问题就此关闭。
+1. ~~上机跑 ADT 校验~~ ✅ 已完成（2026-11-07，6 passed / 0 failed）。
 2. 拿到真实 DRAM 上界（`/proc/meminfo`），用 `--dram-size` 重新生成 ADT。
 3. 然后才是内核：Xcode 26.2 + Apple 源码投放 + 匹配本机的 `kernelcache` 做 prelink（`ARM64_LINK_ADDR=0xfffffff007004000`）。
 

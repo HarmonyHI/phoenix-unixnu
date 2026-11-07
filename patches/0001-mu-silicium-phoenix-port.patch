@@ -157,30 +157,286 @@ index f7a0b9d8..c55e84b9 100644
    INF MdeModulePkg/Universal/SmbiosDxe/SmbiosDxe.inf
    INF SiliciumPkg/Drivers/SmBiosTableDxe/SmBiosTableDxe.inf
 diff --git a/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c b/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c
-index fdf407b8..ee6b3363 100644
+index fdf407b8..9a602a81 100644
 --- a/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c
 +++ b/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManager.c
-@@ -7,6 +7,7 @@
- 
- #include <Library/PcdLib.h>
- #include <Library/DebugLib.h>
+@@ -1,242 +1,323 @@
+-/**
+-  Copyright (C) DuoWoA authors. All rights reserved.
+-  Copyright (C) Microsoft Corporation. All rights reserved.
+-
+-  SPDX-License-Identifier: BSD-2-Clause-Patent
+-**/
+-
+-#include <Library/PcdLib.h>
+-#include <Library/DebugLib.h>
+-#include <Library/AcpiTableUpdateLib.h>
+-#include <Library/DeviceBootManagerLib.h>
+-#include <Library/PlatformBootManagerLib.h>
+-#include <Library/UefiRuntimeServicesTableLib.h>
+-#include <Library/UefiBootServicesTableLib.h>
+-#include <Library/SecureBootHandlerLib.h>
+-#include <Library/MemoryAllocationLib.h>
+-#include <Library/MsBootOptionsLib.h>
+-#include <Library/BootGraphicsLib.h>
+-#include <Library/BootGraphics.h>
+-#include <Library/PrintLib.h>
+-
+-#include <Configuration/BootDevices.h>
+-
+-#include "BootManager.h"
+-
+-//
+-// Global Variables
+-//
+-STATIC UINTN XPos = 0;
+-STATIC UINTN YPos = 0;
+-
+-//
+-// BDS Combo Message
+-//
+-STATIC CONST CHAR8 *ComboMessage = "[Volume Up] Boot Manager";
+-
+-VOID
+-EFIAPI
+-PlatformBootManagerBeforeConsole ()
+-{
+-  // Signal End Of DXE
+-  EfiEventGroupSignal (&gEfiEndOfDxeEventGroupGuid);
+-
+-  // Dispatch Deferred Images
+-  EfiBootManagerDispatchDeferredImages ();
+-
+-  // Register Boot Options
+-  MsBootOptionsLibRegisterDefaultBootOptions ();
+-
+-  // Register Console Variables
+-  EfiBootManagerUpdateConsoleVariable (ConIn,  (EFI_DEVICE_PATH_PROTOCOL *)&KeypadDevicePath,  NULL);
+-  EfiBootManagerUpdateConsoleVariable (ConIn,  (EFI_DEVICE_PATH_PROTOCOL *)&UsbKeyboardDevicePath, NULL);
+-  EfiBootManagerUpdateConsoleVariable (ConOut, (EFI_DEVICE_PATH_PROTOCOL *)&DisplayDevicePath, NULL);
+-  EfiBootManagerUpdateConsoleVariable (ErrOut, (EFI_DEVICE_PATH_PROTOCOL *)&DisplayDevicePath, NULL);
+-
+-  // Execute Secondary Before Console
+-  DeviceBootManagerBeforeConsole (NULL, NULL);
+-}
+-
+-VOID
+-PostGopSetup (OUT EFI_GRAPHICS_OUTPUT_PROTOCOL **GopProtocol)
+-{
+-  EFI_STATUS                    Status;
+-  EFI_GRAPHICS_OUTPUT_PROTOCOL *LocalGopProtocol;
+-
+-  // Verify Parameters
+-  if (GopProtocol == NULL) {
+-    return;
+-  }
+-
+-  // Locate GOP Protocol
+-  Status = gBS->HandleProtocol (gST->ConsoleOutHandle, &gEfiGraphicsOutputProtocolGuid, (VOID *)&LocalGopProtocol);
+-  if (EFI_ERROR (Status) && Status != EFI_UNSUPPORTED) {
+-    DEBUG ((EFI_D_ERROR, "%a: Failed to Locate GOP Protocol from Handle! Status = %r\n", __FUNCTION__, Status));
+-    return;
+-  }
+-
+-  // Check Status
+-  if (Status == EFI_UNSUPPORTED) {
+-    // Locate GOP Protocol
+-    Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID *)&LocalGopProtocol);
+-    if (EFI_ERROR (Status)) {
+-      DEBUG ((EFI_D_ERROR, "%a: Failed to Locate GOP Protocol! Status = %r\n", __FUNCTION__, Status));
+-      return;
+-    }
+-
+-    // Install GOP Protocol
+-    Status = gBS->InstallProtocolInterface (&gST->ConsoleOutHandle, &gEfiGraphicsOutputProtocolGuid, EFI_NATIVE_INTERFACE, LocalGopProtocol);
+-    if (EFI_ERROR (Status)) {
+-      DEBUG ((EFI_D_ERROR, "%a: Failed to Install GOP Protocol onto \"ConsoleOutHandle\"! Status = %r\n", __FUNCTION__, Status));
+-    }
+-  }
+-
+-  // Pass GOP Protocol
+-  *GopProtocol = LocalGopProtocol;
+-}
+-
+-VOID
+-EFIAPI
+-PlatformBootManagerAfterConsole ()
+-{
+-  EFI_STATUS                    Status      = EFI_SUCCESS;
+-  EFI_GRAPHICS_OUTPUT_PROTOCOL *GopProtocol = NULL;
+-
+-  // Post Setup GOP
+-  PostGopSetup (&GopProtocol);
+-
+-  // Display Boot Logo
+-  Status = DisplayBootGraphic (BG_SYSTEM_LOGO);
+-  if (EFI_ERROR (Status)) {
+-    DEBUG ((EFI_D_ERROR, "%a: Failed to Display Boot Logo! Status = %r\n", __FUNCTION__, Status));
+-  }
+-
+-  // Register Key Callback
+-  Status = RegisterKeyCallback ((EFI_DEVICE_PATH_PROTOCOL *)&KeypadDevicePath);
+-  if (!EFI_ERROR (Status) && GopProtocol != NULL) {
+-    // Set Screen Resolution
+-    UINT32 ScreenWidth  = GopProtocol->Mode->Info->HorizontalResolution;
+-    UINT32 ScreenHeight = GopProtocol->Mode->Info->VerticalResolution;
+-
+-    // Set Combo Message Position
+-    XPos = (ScreenWidth - AsciiStrLen (ComboMessage) * EFI_GLYPH_WIDTH) / 2;
+-    YPos = ScreenHeight * 48 / 50;
+-  }
+-
+-  // Execute Secondary After Console
+-  DeviceBootManagerAfterConsole ();
+-}
+-
+-VOID
+-EFIAPI
+-PlatformBootManagerOnDemandConInConnect ()
+-{
+-  // Execute Secondary On Demand
+-  DeviceBootManagerOnDemandConInConnect ();
+-}
+-
+-VOID
+-EFIAPI
+-PlatformBootManagerProcessBootCompletion (OUT EFI_BOOT_MANAGER_LOAD_OPTION *BootOption)
+-{
+-  return;
+-}
+-
+-VOID
+-EFIAPI
+-PlatformBootManagerPriorityBoot (IN OUT UINT16 **BootNext)
+-{
+-  EFI_STATUS                   Status;
+-  EFI_BOOT_MANAGER_LOAD_OPTION LoadOption;
+-  BOOLEAN                      BootManagerFlag;
+-
+-  // Unregister Key Callback
+-  UnregisterKeyCallback ();
+-
+-  // Get Boot Manager Flag
+-  BootManagerFlag = EnterBootManager ();
+-  if (BootManagerFlag == FALSE) {
+-    return;
+-  }
+-
+-  // Get Boot Manager Load Option
+-  Status = MsBootOptionsLibGetBootManagerMenu (&LoadOption, NULL);
+-  if (EFI_ERROR (Status)) {
+-    DEBUG ((EFI_D_ERROR, "%a: Failed to get Boot Manager Load Option! Status = %r", __FUNCTION__, Status));
+-    return;
+-  }
+-
+-  // Execute Boot Manager Load Option
+-  EfiBootManagerBoot           (&LoadOption);
+-  EfiBootManagerFreeLoadOption (&LoadOption);
+-}
+-
+-VOID
+-EFIAPI
+-PlatformBootManagerWaitCallback (IN UINT16 TimeoutRemain)
+-{
+-  EFI_GRAPHICS_OUTPUT_BLT_PIXEL Color;
+-
+-  // Verify Combo Message Position
+-  if (XPos == 0 && YPos == 0) {
+-    return;
+-  }
+-
+-  // Get Timeout Time
+-  UINT16 Timeout = PcdGet16 (PcdPlatformBootTimeOut);
+-
+-  // Check Remaining Timeout
+-  if (TimeoutRemain == Timeout || TimeoutRemain == 0) {
+-    // Set Draw Color
+-    UINT8 DrawColor = (TimeoutRemain == Timeout) ? 0xFF : 0x00;
+-
+-    // Set GOP Draw Color
+-    Color.Red = Color.Green = Color.Blue = DrawColor;
+-
+-    // Print Combo Message
+-    AsciiPrintXY (XPos, YPos, &Color, NULL, ComboMessage);
+-  }
+-}
+-
+-VOID
+-EFIAPI
+-PlatformBootManagerUnableToBoot ()
+-{
+-  EFI_STATUS Status;
+-
+-  // Execute Secondary Unable To Boot
+-  DeviceBootManagerUnableToBoot ();
+-
+-  // Display No Boot OS Logo
+-  Status = DisplayBootGraphic (BG_NO_BOOT_OS);
+-  if (EFI_ERROR (Status)) {
+-    DEBUG ((EFI_D_ERROR, "%a: Failed to Display No Boot OS Logo! Status = %r\n", __FUNCTION__, Status));
+-    Print (L"No Operating System Found! Please make sure that an OS is Installed.\n");
+-  }
+-
+-  // Wait 10s
+-  gBS->Stall (10000000);
+-
+-  // Shutdown
+-  gRT->ResetSystem (EfiResetShutdown, EFI_SUCCESS, 0, NULL);
+-
+-  // Do Cpu Dead Loop
+-  CpuDeadLoop ();
+-}
+-
+-VOID
+-EFIAPI
+-PlatformBootManagerBdsEntry ()
+-{
+-  EFI_STATUS Status;
+-
+-  // Setup Secure Boot
+-  Status = SetupSecureBoot ();
+-  ASSERT_EFI_ERROR (Status);
+-
+-  // Update ACPI Tables
+-  UpdateAcpiTables ();
+-
+-  // Execute Secondary BDS Entry
+-  DeviceBootManagerBdsEntry ();
+-}
++/**
++  Copyright (C) DuoWoA authors. All rights reserved.
++  Copyright (C) Microsoft Corporation. All rights reserved.
++
++  SPDX-License-Identifier: BSD-2-Clause-Patent
++**/
++
++#include <Library/PcdLib.h>
++#include <Library/DebugLib.h>
 +#include <Library/DxeServicesLib.h>
- #include <Library/AcpiTableUpdateLib.h>
- #include <Library/DeviceBootManagerLib.h>
- #include <Library/PlatformBootManagerLib.h>
-@@ -18,6 +19,8 @@
- #include <Library/BootGraphicsLib.h>
- #include <Library/BootGraphics.h>
- #include <Library/PrintLib.h>
++#include <Library/AcpiTableUpdateLib.h>
++#include <Library/DeviceBootManagerLib.h>
++#include <Library/PlatformBootManagerLib.h>
++#include <Library/UefiRuntimeServicesTableLib.h>
++#include <Library/UefiBootServicesTableLib.h>
++#include <Library/SecureBootHandlerLib.h>
++#include <Library/MemoryAllocationLib.h>
++#include <Library/MsBootOptionsLib.h>
++#include <Library/BootGraphicsLib.h>
++#include <Library/BootGraphics.h>
++#include <Library/PrintLib.h>
 +#include <Library/HobLib.h>
 +#include <Library/FdtLib.h>
- 
- #include <Configuration/BootDevices.h>
- 
-@@ -29,6 +32,129 @@
- STATIC UINTN XPos = 0;
- STATIC UINTN YPos = 0;
- 
++
++#include <Configuration/BootDevices.h>
++
++#include "BootManager.h"
++
++//
++// Global Variables
++//
++STATIC UINTN XPos = 0;
++STATIC UINTN YPos = 0;
++
 +//
 +// Embedded payload application GUID (UniXNUPkg/Application/UniXNU)
 +//
@@ -196,8 +452,10 @@ index fdf407b8..ee6b3363 100644
 +};
 +
 +//
-+// Dump the FDT handoff state so a single screen photo shows where the
-+// bootloader's device tree and the initrd payload actually live.
++// Report only whether the bootloader handed a device tree over. The payload no
++// longer depends on it: UniXNURamDiskDxe publishes the copy embedded in the
++// firmware volume. Scanning DRAM here used to hang the bus on the HYP/QTEE
++// windows (0x85700000-0x86000000, 0x86200000-0x98500000).
 +//
 +STATIC
 +VOID
@@ -205,112 +463,80 @@ index fdf407b8..ee6b3363 100644
 +  VOID
 +  )
 +{
-+  EFI_HOB_GUID_TYPE  *Hob;
-+  UINT64             Dtb;
-+  CONST VOID         *Fdt;
-+  INT32              Chosen;
-+  CONST VOID         *StartProp;
-+  CONST VOID         *EndProp;
-+  INT32              Len;
-+  UINT64             Start;
-+  UINT64             End;
-+  UINT64             Addr;
-+  UINTN              Found;
-+  UINT8              *P;
-+
-+  Hob = GetFirstGuidHob (&mEntryArgHobGuid);
-+  if (Hob == NULL) {
-+    DEBUG ((DEBUG_ERROR, "PHXFD: no entry argument HOB\n"));
++  if (GetFirstGuidHob (&mEntryArgHobGuid) == NULL) {
++    DEBUG ((DEBUG_ERROR, "PHXFD: no entry argument HOB, payload comes from the FV\n"));
 +  } else {
-+    Dtb = ReadUnaligned64 ((CONST UINT64 *)GET_GUID_HOB_DATA (Hob));
-+    DEBUG ((DEBUG_ERROR, "PHXFD: x0 (dtb) = 0x%016lx\n", Dtb));
-+
-+    Fdt = (CONST VOID *)(UINTN)Dtb;
-+    if ((Dtb != 0) && ((Dtb & 3) == 0) && (FdtCheckHeader (Fdt) == 0)) {
-+      DEBUG ((DEBUG_ERROR, "PHXFD: dtb ok, %u bytes\n", (UINT32)FdtTotalSize (Fdt)));
-+      Chosen = FdtPathOffset (Fdt, "/chosen");
-+      DEBUG ((DEBUG_ERROR, "PHXFD: /chosen offset = %d\n", Chosen));
-+      if (Chosen >= 0) {
-+        StartProp = FdtGetProp (Fdt, Chosen, "linux,initrd-start", &Len);
-+        EndProp   = FdtGetProp (Fdt, Chosen, "linux,initrd-end", &Len);
-+        if ((StartProp == NULL) || (EndProp == NULL)) {
-+          DEBUG ((DEBUG_ERROR, "PHXFD: NO initrd props in /chosen\n"));
-+        } else {
-+          Start = Fdt64ToCpu (ReadUnaligned64 (StartProp));
-+          End   = Fdt64ToCpu (ReadUnaligned64 (EndProp));
-+          DEBUG ((DEBUG_ERROR, "PHXFD: initrd 0x%lx - 0x%lx (len 0x%lx)\n", Start, End, End - Start));
-+          if ((Start != 0) && (End > Start)) {
-+            P = (UINT8 *)(UINTN)Start;
-+            DEBUG ((DEBUG_ERROR, "PHXFD: initrd head %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
-+                    P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7], P[8], P[9], P[10]));
-+          }
-+        }
-+      }
-+    } else {
-+      DEBUG ((DEBUG_ERROR, "PHXFD: x0 is NOT a valid device tree\n"));
-+    }
++    DEBUG ((DEBUG_ERROR, "PHXFD: entry argument HOB present\n"));
 +  }
-+
-+  //
-+  // Scan DRAM for the FAT payload signature ("UNIXNU00" OEM name at offset 3
-+  // of the boot sector) to locate where the bootloader actually placed the
-+  // ramdisk. Only probe mapped DRAM ranges — the gaps between them
-+  // (0x84920000-0x85700000 and 0x98500000-0x9C000000) are unmapped and a
-+  // read there would raise a data abort.
-+  //
-+  STATIC CONST UINT64  ScanRanges[][2] = {
-+    { 0x80000000, 0x80600000 },  // Kernel
-+    { 0x80600000, 0x81320000 },  // DBI Dump
-+    { 0x81320000, 0x84920000 },  // DXE Heap
-+    { 0x85700000, 0x86000000 },  // HYP .. GPU PRR
-+    { 0x86200000, 0x98500000 },  // QTEE .. PIL_REGION end
-+    { 0x9C000000, 0x9F800000 },  // Display Reserved .. TGCM end
-+  };
-+
-+  Found = 0;
-+  for (UINTN Range = 0; Range < ARRAY_SIZE (ScanRanges); Range++) {
-+    for (Addr = ScanRanges[Range][0]; (Addr + 512) < ScanRanges[Range][1]; Addr += 512) {
-+      P = (UINT8 *)(UINTN)Addr;
-+      if ((P[3] == 'U') && (P[4] == 'N') && (P[5] == 'I') && (P[6] == 'X') &&
-+          (P[7] == 'N') && (P[8] == 'U') && (P[9] == '0') && (P[10] == '0'))
-+      {
-+        DEBUG ((DEBUG_ERROR, "PHXFD: UNIXNU00 FAT at 0x%016lx\n", Addr));
-+        if (++Found >= 8) {
-+          break;
-+        }
-+      }
-+    }
-+
-+    if (Found >= 8) {
-+      break;
-+    }
-+  }
-+
-+  if (Found == 0) {
-+    DEBUG ((DEBUG_ERROR, "PHXFD: no UNIXNU00 signature found in DRAM scan\n"));
-+  }
-+
-+  //
-+  // Also peek at the address we asked the bootloader to use.
-+  //
-+  P = (UINT8 *)(UINTN)0x8AB00000;
-+  DEBUG ((DEBUG_ERROR, "PHXFD: [0x8AB00000] = %02x %02x %02x %02x %02x %02x %02x %02x\n",
-+          P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7]));
-+
-+  //
-+  // Give the operator time to photograph the screen before the log scrolls on.
-+  //
-+  gBS->Stall (8000000);
 +}
 +
 +
- //
- // BDS Combo Message
- //
-@@ -95,6 +221,43 @@ PostGopSetup (OUT EFI_GRAPHICS_OUTPUT_PROTOCOL **GopProtocol)
-   *GopProtocol = LocalGopProtocol;
- }
- 
++//
++// BDS Combo Message
++//
++STATIC CONST CHAR8 *ComboMessage = "[Volume Up] Boot Manager";
++
++VOID
++EFIAPI
++PlatformBootManagerBeforeConsole ()
++{
++  // Signal End Of DXE
++  EfiEventGroupSignal (&gEfiEndOfDxeEventGroupGuid);
++
++  // Dispatch Deferred Images
++  EfiBootManagerDispatchDeferredImages ();
++
++  // Register Boot Options
++  MsBootOptionsLibRegisterDefaultBootOptions ();
++
++  // Register Console Variables
++  EfiBootManagerUpdateConsoleVariable (ConIn,  (EFI_DEVICE_PATH_PROTOCOL *)&KeypadDevicePath,  NULL);
++  EfiBootManagerUpdateConsoleVariable (ConIn,  (EFI_DEVICE_PATH_PROTOCOL *)&UsbKeyboardDevicePath, NULL);
++  EfiBootManagerUpdateConsoleVariable (ConOut, (EFI_DEVICE_PATH_PROTOCOL *)&DisplayDevicePath, NULL);
++  EfiBootManagerUpdateConsoleVariable (ErrOut, (EFI_DEVICE_PATH_PROTOCOL *)&DisplayDevicePath, NULL);
++
++  // Execute Secondary Before Console
++  DeviceBootManagerBeforeConsole (NULL, NULL);
++}
++
++VOID
++PostGopSetup (OUT EFI_GRAPHICS_OUTPUT_PROTOCOL **GopProtocol)
++{
++  EFI_STATUS                    Status;
++  EFI_GRAPHICS_OUTPUT_PROTOCOL *LocalGopProtocol;
++
++  // Verify Parameters
++  if (GopProtocol == NULL) {
++    return;
++  }
++
++  // Locate GOP Protocol
++  Status = gBS->HandleProtocol (gST->ConsoleOutHandle, &gEfiGraphicsOutputProtocolGuid, (VOID *)&LocalGopProtocol);
++  if (EFI_ERROR (Status) && Status != EFI_UNSUPPORTED) {
++    DEBUG ((EFI_D_ERROR, "%a: Failed to Locate GOP Protocol from Handle! Status = %r\n", __FUNCTION__, Status));
++    return;
++  }
++
++  // Check Status
++  if (Status == EFI_UNSUPPORTED) {
++    // Locate GOP Protocol
++    Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID *)&LocalGopProtocol);
++    if (EFI_ERROR (Status)) {
++      DEBUG ((EFI_D_ERROR, "%a: Failed to Locate GOP Protocol! Status = %r\n", __FUNCTION__, Status));
++      return;
++    }
++
++    // Install GOP Protocol
++    Status = gBS->InstallProtocolInterface (&gST->ConsoleOutHandle, &gEfiGraphicsOutputProtocolGuid, EFI_NATIVE_INTERFACE, LocalGopProtocol);
++    if (EFI_ERROR (Status)) {
++      DEBUG ((EFI_D_ERROR, "%a: Failed to Install GOP Protocol onto \"ConsoleOutHandle\"! Status = %r\n", __FUNCTION__, Status));
++    }
++  }
++
++  // Pass GOP Protocol
++  *GopProtocol = LocalGopProtocol;
++}
++
 +/**
 +  Launch an embedded UEFI application from the firmware volume.
 +
@@ -348,29 +574,158 @@ index fdf407b8..ee6b3363 100644
 +  DEBUG ((DEBUG_ERROR, "PHX: %a returned: %r\n", Name, Status));
 +}
 +
- VOID
- EFIAPI
- PlatformBootManagerAfterConsole ()
-@@ -105,12 +268,19 @@ PlatformBootManagerAfterConsole ()
-   // Post Setup GOP
-   PostGopSetup (&GopProtocol);
- 
++VOID
++EFIAPI
++PlatformBootManagerAfterConsole ()
++{
++  EFI_STATUS                    Status      = EFI_SUCCESS;
++  EFI_GRAPHICS_OUTPUT_PROTOCOL *GopProtocol = NULL;
++
++  // Post Setup GOP
++  PostGopSetup (&GopProtocol);
++
 +  // Dump FDT / initrd handoff diagnostics (one screen, right before payload)
 +  DumpFdtDiagnostics ();
 +
-   // Display Boot Logo
-   Status = DisplayBootGraphic (BG_SYSTEM_LOGO);
-   if (EFI_ERROR (Status)) {
-     DEBUG ((EFI_D_ERROR, "%a: Failed to Display Boot Logo! Status = %r\n", __FUNCTION__, Status));
-   }
- 
++  // Display Boot Logo
++  Status = DisplayBootGraphic (BG_SYSTEM_LOGO);
++  if (EFI_ERROR (Status)) {
++    DEBUG ((EFI_D_ERROR, "%a: Failed to Display Boot Logo! Status = %r\n", __FUNCTION__, Status));
++  }
++
 +  // Launch the embedded UEFI Shell as a payload, so this device can reach an
 +  // interactive console without any dependency on storage or NV variables.
 +  LaunchEmbeddedPayload (&mShellFileGuid, "UniXNU");
 +
-   // Register Key Callback
-   Status = RegisterKeyCallback ((EFI_DEVICE_PATH_PROTOCOL *)&KeypadDevicePath);
-   if (!EFI_ERROR (Status) && GopProtocol != NULL) {
++  // Register Key Callback
++  Status = RegisterKeyCallback ((EFI_DEVICE_PATH_PROTOCOL *)&KeypadDevicePath);
++  if (!EFI_ERROR (Status) && GopProtocol != NULL) {
++    // Set Screen Resolution
++    UINT32 ScreenWidth  = GopProtocol->Mode->Info->HorizontalResolution;
++    UINT32 ScreenHeight = GopProtocol->Mode->Info->VerticalResolution;
++
++    // Set Combo Message Position
++    XPos = (ScreenWidth - AsciiStrLen (ComboMessage) * EFI_GLYPH_WIDTH) / 2;
++    YPos = ScreenHeight * 48 / 50;
++  }
++
++  // Execute Secondary After Console
++  DeviceBootManagerAfterConsole ();
++}
++
++VOID
++EFIAPI
++PlatformBootManagerOnDemandConInConnect ()
++{
++  // Execute Secondary On Demand
++  DeviceBootManagerOnDemandConInConnect ();
++}
++
++VOID
++EFIAPI
++PlatformBootManagerProcessBootCompletion (OUT EFI_BOOT_MANAGER_LOAD_OPTION *BootOption)
++{
++  return;
++}
++
++VOID
++EFIAPI
++PlatformBootManagerPriorityBoot (IN OUT UINT16 **BootNext)
++{
++  EFI_STATUS                   Status;
++  EFI_BOOT_MANAGER_LOAD_OPTION LoadOption;
++  BOOLEAN                      BootManagerFlag;
++
++  // Unregister Key Callback
++  UnregisterKeyCallback ();
++
++  // Get Boot Manager Flag
++  BootManagerFlag = EnterBootManager ();
++  if (BootManagerFlag == FALSE) {
++    return;
++  }
++
++  // Get Boot Manager Load Option
++  Status = MsBootOptionsLibGetBootManagerMenu (&LoadOption, NULL);
++  if (EFI_ERROR (Status)) {
++    DEBUG ((EFI_D_ERROR, "%a: Failed to get Boot Manager Load Option! Status = %r", __FUNCTION__, Status));
++    return;
++  }
++
++  // Execute Boot Manager Load Option
++  EfiBootManagerBoot           (&LoadOption);
++  EfiBootManagerFreeLoadOption (&LoadOption);
++}
++
++VOID
++EFIAPI
++PlatformBootManagerWaitCallback (IN UINT16 TimeoutRemain)
++{
++  EFI_GRAPHICS_OUTPUT_BLT_PIXEL Color;
++
++  // Verify Combo Message Position
++  if (XPos == 0 && YPos == 0) {
++    return;
++  }
++
++  // Get Timeout Time
++  UINT16 Timeout = PcdGet16 (PcdPlatformBootTimeOut);
++
++  // Check Remaining Timeout
++  if (TimeoutRemain == Timeout || TimeoutRemain == 0) {
++    // Set Draw Color
++    UINT8 DrawColor = (TimeoutRemain == Timeout) ? 0xFF : 0x00;
++
++    // Set GOP Draw Color
++    Color.Red = Color.Green = Color.Blue = DrawColor;
++
++    // Print Combo Message
++    AsciiPrintXY (XPos, YPos, &Color, NULL, ComboMessage);
++  }
++}
++
++VOID
++EFIAPI
++PlatformBootManagerUnableToBoot ()
++{
++  EFI_STATUS Status;
++
++  // Execute Secondary Unable To Boot
++  DeviceBootManagerUnableToBoot ();
++
++  // Display No Boot OS Logo
++  Status = DisplayBootGraphic (BG_NO_BOOT_OS);
++  if (EFI_ERROR (Status)) {
++    DEBUG ((EFI_D_ERROR, "%a: Failed to Display No Boot OS Logo! Status = %r\n", __FUNCTION__, Status));
++    Print (L"No Operating System Found! Please make sure that an OS is Installed.\n");
++  }
++
++  // Wait 10s
++  gBS->Stall (10000000);
++
++  // Shutdown
++  gRT->ResetSystem (EfiResetShutdown, EFI_SUCCESS, 0, NULL);
++
++  // Do Cpu Dead Loop
++  CpuDeadLoop ();
++}
++
++VOID
++EFIAPI
++PlatformBootManagerBdsEntry ()
++{
++  EFI_STATUS Status;
++
++  // Setup Secure Boot
++  Status = SetupSecureBoot ();
++  ASSERT_EFI_ERROR (Status);
++
++  // Update ACPI Tables
++  UpdateAcpiTables ();
++
++  // Execute Secondary BDS Entry
++  DeviceBootManagerBdsEntry ();
++}
 diff --git a/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManagerLib.inf b/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManagerLib.inf
 index 2310dc61..2fa74c67 100644
 --- a/Silicon/Silicium/SiliciumPkg/Library/BootManagerLib/BootManagerLib.inf

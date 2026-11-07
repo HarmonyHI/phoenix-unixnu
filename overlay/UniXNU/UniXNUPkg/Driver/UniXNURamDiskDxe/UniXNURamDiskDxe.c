@@ -43,6 +43,12 @@ STATIC CONST EFI_GUID  mPayloadFileGuid = {
   0x6A1D2C33, 0x8E4F, 0x4B7A, { 0x9C, 0x21, 0x2D, 0x5B, 0x6E, 0x8F, 0x0A, 0x17 }
 };
 
+//
+// Step markers: a synchronous exception during the boot loses everything but
+// the serial log tail, so each phase prints its own distinctive label.
+//
+#define STEP(_txt)  DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: [" _txt "]\n"))
+
 /**
   Ask the firmware to bind everything that can sit on top of our BlockIo
   (DiskIoDxe, then PartitionDxe/EnhancedFatDxe). Without this the volume only
@@ -61,6 +67,7 @@ ConnectBlockDevice (
     return;
   }
 
+  STEP ("connect controller");
   Status = gBS->ConnectController (Handle, NULL, NULL, TRUE);
   DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: ConnectController %r\n", Status));
 }
@@ -98,6 +105,7 @@ ProbeConfigFilesystem (
       continue;
     }
 
+    STEP ("open volume");
     if (EFI_ERROR (Fs->OpenVolume (Fs, &Root))) {
       continue;
     }
@@ -108,11 +116,12 @@ ProbeConfigFilesystem (
       continue;
     }
 
-    Size       = sizeof (Buffer) - 2;
+    Size       = sizeof (Buffer) - 1;
     ZeroMem (Buffer, sizeof (Buffer));
     if (!EFI_ERROR (File->Read (File, &Size, Buffer))) {
-      Buffer[Size / 2] = L'\0';
-      DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: config FOUND on handle %u, %u bytes, starts \"%S\"\n", (UINT32)Index, (UINT32)Size, Buffer));
+      // The config is plain ASCII, so print it as CHAR8 (not %S).
+      ((CHAR8 *)Buffer)[Size] = '\0';
+      DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: config FOUND on handle %u, %u bytes: \"%a\"\n", (UINT32)Index, (UINT32)Size, (CHAR8 *)Buffer));
     }
 
     File->Close (File);
@@ -349,13 +358,19 @@ PublishInitrd (
 // DRAM regions the firmware has actually mapped. Any address outside these
 // would raise a data abort when read.
 //
+// The boot image's ramdisk window comes first: ABL loads the payload there
+// (ramdisk_addr 0x8AB00000 + 0x0AB00000 offset), so a scan that starts here
+// finds it in a few hundred iterations instead of walking hundreds of
+// megabytes through regions the hypervisor can take away underneath us.
+//
 STATIC CONST UINT64  mMappedRanges[][2] = {
+  { 0x8AB00000, 0x8B000000 },  // boot image ramdisk, 5 MiB
   { 0x80000000, 0x80600000 },  // Kernel
   { 0x80600000, 0x81320000 },  // DBI Dump
   { 0x81320000, 0x84920000 },  // DXE Heap
-  { 0x85700000, 0x86000000 },  // HYP .. GPU PRR
   { 0x86200000, 0x98500000 },  // QTEE .. PIL_REGION end
   { 0x9C000000, 0x9F800000 },  // Display Reserved .. TGCM end
+  { 0x85700000, 0x86000000 },  // HYP .. GPU PRR (scanned last: faults easily)
 };
 
 /**
@@ -387,6 +402,7 @@ PublishFatAt (
   }
 
   VolumeSize       = (UINT64)TotalSectors * BytesPerSector;
+  DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: BPB ok, volume 0x%lx size 0x%lx, installing\n", Base, VolumeSize));
   mRamBase         = (UINT8 *)(UINTN)Base;
   mMedia.MediaId   = 1;
   mMedia.RemovableMedia   = FALSE;
@@ -471,19 +487,29 @@ PublishFromFirmwareVolume (
     return Status;
   }
 
+  DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: %u firmware volume(s)\n", (UINT32)Count));
+
   for (Index = 0; Index < Count; Index++) {
     EFI_FIRMWARE_VOLUME2_PROTOCOL  *Fv;
     EFI_GUID                       Name;
     EFI_FV_FILETYPE                Type;
     EFI_FV_FILE_ATTRIBUTES         Attributes;
     UINTN                          FileSize;
-    UINT32                         Key;
+    UINTN                          Key;
 
     if (EFI_ERROR (gBS->HandleProtocol (Volumes[Index], &gEfiFirmwareVolume2ProtocolGuid, (VOID **)&Fv))) {
       continue;
     }
 
-    Key = 0;
+    //
+    // GetNextFile filters by *FileType on input: only EFI_FV_FILETYPE_ALL (0)
+    // enumerates everything. An uninitialised value silently ends the walk.
+    // The Key is a caller-allocated buffer the implementation reads and writes
+    // as a full UINTN, so it must be UINTN-sized (not UINT32) or the upper
+    // bytes come from stale stack and get dereferenced as a list pointer.
+    //
+    Type = 0;
+    Key  = 0;
     while (!EFI_ERROR (Fv->GetNextFile (Fv, &Key, &Type, &Name, &Attributes, &FileSize))) {
       VOID    *Buffer;
       UINTN   BufferSize;
@@ -493,10 +519,12 @@ PublishFromFirmwareVolume (
         continue;
       }
 
+      DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: payload FFS in FV %u (type 0x%x, file %u bytes), ReadSection...\n", (UINT32)Index, Type, (UINT32)FileSize));
       Buffer             = NULL;
       BufferSize         = 0;
       AuthenticationStatus = 0;
       Status             = Fv->ReadSection (Fv, &Name, EFI_SECTION_RAW, 0, &Buffer, &BufferSize, &AuthenticationStatus);
+      DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: ReadSection %r buf 0x%lx size %u\n", Status, (UINT64)(UINTN)Buffer, (UINT32)BufferSize));
       if (!EFI_ERROR (Status) && (Buffer != NULL) && (BufferSize >= RAM_BLOCK_SIZE)) {
         DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: embedded payload %u bytes from FV %u\n", (UINT32)BufferSize, (UINT32)Index));
         PublishFatAt ((UINT64)(UINTN)Buffer);
@@ -525,8 +553,16 @@ UniXNURamDiskDxeEntry (
 
   Hob = GetFirstGuidHob (&mEntryArgHobGuid);
   if (Hob == NULL) {
-    DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: no entry argument HOB, scanning\n"));
-    ScanForPayloadFat ();
+    //
+    // The firmware carries the payload itself, so it is tried before any DRAM
+    // probing: the mapped-range scan walks regions the hypervisor protects and
+    // dies there (observed as a frozen screen right after this debug line).
+    //
+    DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: no entry argument HOB, trying embedded payload\n"));
+    if (EFI_ERROR (PublishFromFirmwareVolume ())) {
+      ScanForPayloadFat ();
+    }
+
     return EFI_SUCCESS;
   }
 

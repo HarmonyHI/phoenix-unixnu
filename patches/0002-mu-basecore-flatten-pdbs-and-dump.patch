@@ -1,0 +1,517 @@
+diff --git a/ArmPkg/Drivers/CpuDxe/CpuMmuCommon.c b/ArmPkg/Drivers/CpuDxe/CpuMmuCommon.c
+index addcf76..4cd2096 100644
+--- a/ArmPkg/Drivers/CpuDxe/CpuMmuCommon.c
++++ b/ArmPkg/Drivers/CpuDxe/CpuMmuCommon.c
+@@ -301,6 +301,11 @@ CpuSetMemoryAttributes (
+     }
+ 
+     Status = ArmSetMemoryAttributes (BaseAddress, Length, EfiAttributes, 0);
++
++    if ((EfiAttributes & EFI_MEMORY_CACHETYPE_MASK) == EFI_MEMORY_WC) {
++      DEBUG ((DEBUG_ERROR, "P4 st=%x\n", Status));
++    }
++
+     if (EFI_ERROR (Status)) {
+       return Status;
+     }
+diff --git a/ArmPkg/Library/ArmGenericTimerPhyCounterLib/ArmGenericTimerPhyCounterLib.c b/ArmPkg/Library/ArmGenericTimerPhyCounterLib/ArmGenericTimerPhyCounterLib.c
+index fbbecdc..9378c27 100644
+--- a/ArmPkg/Library/ArmGenericTimerPhyCounterLib/ArmGenericTimerPhyCounterLib.c
++++ b/ArmPkg/Library/ArmGenericTimerPhyCounterLib/ArmGenericTimerPhyCounterLib.c
+@@ -59,7 +59,14 @@ ArmGenericTimerGetTimerFreq (
+   VOID
+   )
+ {
+-  return ArmReadCntFrq ();
++  UINTN Freq;
++
++  Freq = ArmReadCntFrq ();
++  if (!Freq) {
++    Freq = FixedPcdGet64 (PcdTimerFreqOverwrite);
++  }
++
++  return Freq;
+ }
+ 
+ UINTN
+diff --git a/ArmPkg/Library/ArmGenericTimerPhyCounterLib/ArmGenericTimerPhyCounterLib.inf b/ArmPkg/Library/ArmGenericTimerPhyCounterLib/ArmGenericTimerPhyCounterLib.inf
+index c37f272..0462650 100644
+--- a/ArmPkg/Library/ArmGenericTimerPhyCounterLib/ArmGenericTimerPhyCounterLib.inf
++++ b/ArmPkg/Library/ArmGenericTimerPhyCounterLib/ArmGenericTimerPhyCounterLib.inf
+@@ -22,7 +22,12 @@
+ [Packages]
+   MdePkg/MdePkg.dec
+   ArmPkg/ArmPkg.dec
++  SiliciumPkg/SiliciumPkg.dec
+ 
+ [LibraryClasses]
+   ArmLib
+   BaseLib
++  PcdLib
++
++[FixedPcd]
++  gSiliciumPkgTokenSpaceGuid.PcdTimerFreqOverwrite
+diff --git a/ArmPkg/Library/ArmGenericTimerVirtCounterLib/ArmGenericTimerVirtCounterLib.c b/ArmPkg/Library/ArmGenericTimerVirtCounterLib/ArmGenericTimerVirtCounterLib.c
+index 893125a..4b1018b 100644
+--- a/ArmPkg/Library/ArmGenericTimerVirtCounterLib/ArmGenericTimerVirtCounterLib.c
++++ b/ArmPkg/Library/ArmGenericTimerVirtCounterLib/ArmGenericTimerVirtCounterLib.c
+@@ -59,7 +59,14 @@ ArmGenericTimerGetTimerFreq (
+   VOID
+   )
+ {
+-  return ArmReadCntFrq ();
++  UINTN Freq;
++
++  Freq = ArmReadCntFrq ();
++  if (!Freq) {
++    Freq = FixedPcdGet64 (PcdTimerFreqOverwrite);
++  }
++
++  return Freq;
+ }
+ 
+ UINTN
+diff --git a/ArmPkg/Library/ArmGenericTimerVirtCounterLib/ArmGenericTimerVirtCounterLib.inf b/ArmPkg/Library/ArmGenericTimerVirtCounterLib/ArmGenericTimerVirtCounterLib.inf
+index 89fcb71..5c29ece 100644
+--- a/ArmPkg/Library/ArmGenericTimerVirtCounterLib/ArmGenericTimerVirtCounterLib.inf
++++ b/ArmPkg/Library/ArmGenericTimerVirtCounterLib/ArmGenericTimerVirtCounterLib.inf
+@@ -22,7 +22,12 @@
+ [Packages]
+   MdePkg/MdePkg.dec
+   ArmPkg/ArmPkg.dec
++  SiliciumPkg/SiliciumPkg.dec
+ 
+ [LibraryClasses]
+   ArmLib
+   BaseLib
++  PcdLib
++
++[FixedPcd]
++  gSiliciumPkgTokenSpaceGuid.PcdTimerFreqOverwrite
+diff --git a/BaseTools/Bin/basetoolsbin_ext_dep.yaml b/BaseTools/Bin/basetoolsbin_ext_dep.yaml
+deleted file mode 100644
+index 5b3a01f..0000000
+--- a/BaseTools/Bin/basetoolsbin_ext_dep.yaml
++++ /dev/null
+@@ -1,23 +0,0 @@
+-##
+-# Download the compiled basetools from the github release
+-# - Release package contains different binaries based on the host os
+-# Set this downloaded folder on path
+-# Set a Shell variable to this path
+-#
+-# Copyright (c) 2019, Microsoft Corporation
+-# SPDX-License-Identifier: BSD-2-Clause-Patent
+-##
+-scope: global
+-id: edk-tools-bin
+-type: web
+-name: Mu-Basetools
+-source: https://github.com/microsoft/mu_basecore/releases/download/v2026080000.0.4/basetools-v2026080000.0.4.tar.gz
+-version: v2026080000.0.4
+-sha256: c863726a9a6d6139722cb9a6679be7e5a9571ccfa3421704ecd85e0e48a89506
+-internal_path: /basetools/
+-compression_type: tar
+-flags:
+-  - set_shell_var
+-  - set_path
+-  - host_specific
+-var_name: EDK_TOOLS_BIN
+diff --git a/BaseTools/Bin/nasm_ext_dep.yaml b/BaseTools/Bin/nasm_ext_dep.yaml
+deleted file mode 100644
+index ecd3c01..0000000
+--- a/BaseTools/Bin/nasm_ext_dep.yaml
++++ /dev/null
+@@ -1,18 +0,0 @@
+-## @file
+-# Download nasm x86 assembler executable tool from a nuget.org package
+-# - package contains different binaries based on host
+-# Put on the tool on the path
+-#
+-#
+-# Copyright (c) Microsoft Corporation.
+-# SPDX-License-Identifier: BSD-2-Clause-Patent
+-##
+-{
+-  "id": "nasm-1",
+-  "scope": "edk2-build",
+-  "type": "nuget",
+-  "name": "mu_nasm",
+-  "source": "https://pkgs.dev.azure.com/projectmu/mu/_packaging/Basetools-Binary/nuget/v3/index.json",
+-  "version": "20016.1.1",
+-  "flags": ["set_path", "host_specific"]
+-}
+diff --git a/BaseTools/Plugin/FlattenPdbs/FlattenPdbs.py b/BaseTools/Plugin/FlattenPdbs/FlattenPdbs.py
+index a583207..8bd9961 100644
+--- a/BaseTools/Plugin/FlattenPdbs/FlattenPdbs.py
++++ b/BaseTools/Plugin/FlattenPdbs/FlattenPdbs.py
+@@ -9,12 +9,21 @@
+ ###
+ from edk2toolext.environment.plugintypes.uefi_build_plugin import IUefiBuildPlugin
+ import logging
++import os
+ from pathlib import Path
+ 
+ 
+ class FlattenPdbs(IUefiBuildPlugin):
+ 
+     def do_post_build(self, thebuilder):
++        # Symbol flattening unlinks every stale PDB before hard-linking the new
++        # one. Hosts with a delete guard (or any policy that intercepts unlink)
++        # abort the whole build in post processing even though compilation
++        # succeeded, so allow an explicit opt-out.
++        if os.environ.get("EDK2_SKIP_FLATTEN_PDBS"):
++            logging.critical("Skipping PDB flatten (EDK2_SKIP_FLATTEN_PDBS set)")
++            return 0
++
+         # Path to Build output
+         build_path = Path(thebuilder.env.GetValue("BUILD_OUTPUT_BASE"))
+         # Path to where the PDBs will be stored
+diff --git a/MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenu.c b/MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenu.c
+index 5bba6ea..8ad07ce 100644
+--- a/MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenu.c
++++ b/MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenu.c
+@@ -6,6 +6,8 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
+ 
+ **/
+ 
++#include <Library/UefiRuntimeServicesTableLib.h>
++
+ #include "BootManagerMenu.h"
+ 
+ EFI_HII_HANDLE  gStringPackHandle;
+@@ -344,9 +346,9 @@ IgnoreBootOption (
+   }
+ 
+   //
+-  // Ignore the hidden/inactive boot option.
++  // Ignore "UEFI Misc Device" boot options.
+   //
+-  if (((BootOption->Attributes & LOAD_OPTION_HIDDEN) != 0) || ((BootOption->Attributes & LOAD_OPTION_ACTIVE) == 0)) {
++  if (BootOption->Description != NULL && StrnCmp (BootOption->Description, L"UEFI Misc Device", 16) == 0) {
+     return TRUE;
+   }
+ 
+@@ -379,7 +381,7 @@ InitializeBootMenuData (
+   }
+ 
+   BootMenuData->TitleToken[0] = STRING_TOKEN (STR_BOOT_POPUP_MENU_TITLE_STRING);
+-  BootMenuData->PtrTokens     = AllocateZeroPool (BootOptionCount * sizeof (EFI_STRING_ID));
++  BootMenuData->PtrTokens     = AllocateZeroPool ((BootOptionCount + 2) * sizeof (EFI_STRING_ID));
+   ASSERT (BootMenuData->PtrTokens != NULL);
+ 
+   //
+@@ -399,10 +401,19 @@ InitializeBootMenuData (
+                                             );
+   }
+ 
++  //
++  // Add Power Off Option
++  //
++  BootMenuData->PtrTokens[StrIndex++] = HiiSetString (gStringPackHandle, 0, L"Power Off", NULL);
++
++  //
++  // Add Exit Option
++  //
++  BootMenuData->PtrTokens[StrIndex++] = HiiSetString (gStringPackHandle, 0, L"Exit", NULL);
++
+   BootMenuData->ItemCount    = StrIndex;
+   BootMenuData->HelpToken[0] = STRING_TOKEN (STR_BOOT_POPUP_MENU_HELP1_STRING);
+   BootMenuData->HelpToken[1] = STRING_TOKEN (STR_BOOT_POPUP_MENU_HELP2_STRING);
+-  BootMenuData->HelpToken[2] = STRING_TOKEN (STR_BOOT_POPUP_MENU_HELP3_STRING);
+   InitializeBootMenuScreen (BootMenuData);
+   BootMenuData->SelectItem = 0;
+   return EFI_SUCCESS;
+@@ -468,7 +479,7 @@ BootMenuSelectItem (
+       BootMenuData->ScrollBarControl.LastItem  = WantSelectItem;
+     }
+ 
+-    gST->ConOut->SetAttribute (gST->ConOut, EFI_WHITE | EFI_BACKGROUND_BLUE);
++    gST->ConOut->SetAttribute (gST->ConOut, EFI_WHITE | EFI_BACKGROUND_BLACK);
+     FirstItem   = BootMenuData->ScrollBarControl.FirstItem;
+     LastItem    = BootMenuData->ScrollBarControl.LastItem;
+     TopShadeNum = 0;
+@@ -539,7 +550,7 @@ BootMenuSelectItem (
+   //
+   FirstItem = BootMenuData->ScrollBarControl.FirstItem;
+   if ((WantSelectItem != BootMenuData->SelectItem) && !RePaintItems) {
+-    gST->ConOut->SetAttribute (gST->ConOut, EFI_WHITE | EFI_BACKGROUND_BLUE);
++    gST->ConOut->SetAttribute (gST->ConOut, EFI_WHITE | EFI_BACKGROUND_BLACK);
+     String   = HiiGetString (gStringPackHandle, BootMenuData->PtrTokens[BootMenuData->SelectItem], NULL);
+     PrintCol = StartCol  + 1;
+     PrintRow = StartRow + 3 + BootMenuData->SelectItem - FirstItem;
+@@ -550,7 +561,7 @@ BootMenuSelectItem (
+   //
+   // Print want to select item
+   //
+-  gST->ConOut->SetAttribute (gST->ConOut, EFI_WHITE | EFI_BACKGROUND_BLACK);
++  gST->ConOut->SetAttribute (gST->ConOut, EFI_BLACK | EFI_BACKGROUND_LIGHTGRAY);
+   String   = HiiGetString (gStringPackHandle, BootMenuData->PtrTokens[WantSelectItem], NULL);
+   PrintCol = StartCol  + 1;
+   PrintRow = StartRow + TITLE_TOKEN_COUNT + 2 + WantSelectItem - FirstItem;
+@@ -589,7 +600,7 @@ DrawBootPopupMenu (
+   gST->ConOut->ClearScreen (gST->ConOut);
+ 
+   SavedAttribute = gST->ConOut->Mode->Attribute;
+-  gST->ConOut->SetAttribute (gST->ConOut, EFI_WHITE | EFI_BACKGROUND_BLUE);
++  gST->ConOut->SetAttribute (gST->ConOut, EFI_WHITE | EFI_BACKGROUND_BLACK);
+   Width              = BootMenuData->MenuScreen.Width;
+   StartCol           = BootMenuData->MenuScreen.StartCol;
+   StartRow           = BootMenuData->MenuScreen.StartRow;
+@@ -754,6 +765,16 @@ BootFromSelectOption (
+       break;
+     }
+   }
++
++  // Power Off
++  if (SelectItem == ItemNum) {
++    gRT->ResetSystem (EfiResetShutdown, EFI_SUCCESS, 0, NULL);
++  }
++
++  // Exit
++  if (SelectItem == ItemNum + 1) {
++    gBS->Exit (gImageHandle, EFI_SUCCESS, 0, NULL);
++  }
+ }
+ 
+ /**
+diff --git a/MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenu.h b/MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenu.h
+index 697a44a..8b45ad1 100644
+--- a/MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenu.h
++++ b/MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenu.h
+@@ -22,7 +22,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
+ #include <Protocol/BootLogo.h>
+ 
+ #define TITLE_TOKEN_COUNT  1
+-#define HELP_TOKEN_COUNT   3
++#define HELP_TOKEN_COUNT   2
+ 
+ typedef struct _BOOT_MENU_SCREEN {
+   UINTN    StartCol;
+diff --git a/MdeModulePkg/Bus/Usb/UsbBusDxe/UsbBus.h b/MdeModulePkg/Bus/Usb/UsbBusDxe/UsbBus.h
+index d775ca1..e229b16 100644
+--- a/MdeModulePkg/Bus/Usb/UsbBusDxe/UsbBus.h
++++ b/MdeModulePkg/Bus/Usb/UsbBusDxe/UsbBus.h
+@@ -133,10 +133,10 @@ typedef struct _USB_HUB_API    USB_HUB_API;
+ #define USB_CLEAR_FEATURE_REQUEST_TIMEOUT  10
+ 
+ //
+-// Bus raises TPL to TPL_NOTIFY to serialize all its operations
++// Bus raises TPL to TPL_CALLBACK to serialize all its operations
+ // to protect shared data structures.
+ //
+-#define  USB_BUS_TPL  TPL_NOTIFY
++#define  USB_BUS_TPL  TPL_CALLBACK
+ 
+ #define  USB_INTERFACE_SIGNATURE  SIGNATURE_32 ('U', 'S', 'B', 'I')
+ #define  USB_BUS_SIGNATURE        SIGNATURE_32 ('U', 'S', 'B', 'B')
+diff --git a/MdeModulePkg/Core/Dxe/Gcd/Gcd.c b/MdeModulePkg/Core/Dxe/Gcd/Gcd.c
+index e92d19c..0f11e96 100644
+--- a/MdeModulePkg/Core/Dxe/Gcd/Gcd.c
++++ b/MdeModulePkg/Core/Dxe/Gcd/Gcd.c
+@@ -1716,7 +1716,28 @@ CoreSetMemorySpaceAttributes (
+   DEBUG ((DEBUG_GCD, "GCD:SetMemorySpaceAttributes(Base=%016lx,Length=%016lx)\n", BaseAddress, Length));
+   DEBUG ((DEBUG_GCD, "  Attributes  = %016lx\n", Attributes));
+ 
+-  return CoreConvertSpace (GCD_SET_ATTRIBUTES_MEMORY_OPERATION, (EFI_GCD_MEMORY_TYPE)0, (EFI_GCD_IO_TYPE)0, BaseAddress, Length, 0, Attributes);
++  if ((Length < 0x10000) || ((Attributes & EFI_MEMORY_RO) != 0)) {
++    DEBUG ((
++      DEBUG_ERROR,
++      "GSA base=%016lx len=%016lx attr=%016lx ra=%016lx\n",
++      (UINT64)BaseAddress,
++      (UINT64)Length,
++      (UINT64)Attributes,
++      (UINT64)(UINTN)__builtin_return_address (0)
++      ));
++  }
++
++  {
++    EFI_STATUS  GsaStatus;
++
++    GsaStatus = CoreConvertSpace (GCD_SET_ATTRIBUTES_MEMORY_OPERATION, (EFI_GCD_MEMORY_TYPE)0, (EFI_GCD_IO_TYPE)0, BaseAddress, Length, 0, Attributes);
++
++    if ((Attributes & 0xFULL) == 0x2ULL) {
++      DEBUG ((DEBUG_ERROR, "P5 st=%x\n", GsaStatus));
++    }
++
++    return GsaStatus;
++  }
+ }
+ 
+ /**
+diff --git a/SecurityPkg/Library/AuthVariableLib/AuthService.c b/SecurityPkg/Library/AuthVariableLib/AuthService.c
+index d6e9f9f..3bec1ee 100644
+--- a/SecurityPkg/Library/AuthVariableLib/AuthService.c
++++ b/SecurityPkg/Library/AuthVariableLib/AuthService.c
+@@ -29,6 +29,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
+ 
+ #include <Protocol/VariablePolicy.h>
+ #include <Library/VariablePolicyLib.h>
++#include <Library/UefiRuntimeLib.h>
+ 
+ #define SHA_DIGEST_SIZE_MAX  SHA512_DIGEST_SIZE
+ 
+@@ -2570,6 +2571,10 @@ VerifyTimeBasedPayloadAndUpdate (
+   AUTH_VARIABLE_INFO             OrgVariableInfo;
+   BOOLEAN                        IsDel;
+ 
++  if (EfiAtRuntime ()) {
++    return EFI_WRITE_PROTECTED;
++  }
++
+   ZeroMem (&OrgVariableInfo, sizeof (OrgVariableInfo));
+   FindStatus = mAuthVarLibContextIn->FindVariable (
+                                        VariableName,
+diff --git a/SecurityPkg/Library/AuthVariableLib/AuthVariableLib.inf b/SecurityPkg/Library/AuthVariableLib/AuthVariableLib.inf
+index 0b0f0a9..0f605de 100644
+--- a/SecurityPkg/Library/AuthVariableLib/AuthVariableLib.inf
++++ b/SecurityPkg/Library/AuthVariableLib/AuthVariableLib.inf
+@@ -43,6 +43,7 @@
+   BaseCryptLib
+   PlatformSecureLib
+   VariablePolicyLib
++  UefiRuntimeLib
+ 
+ # MU_CHANGE [BEGIN] - TCBZ2506
+ [FeaturePcd]
+diff --git a/ShellPkg/Library/UefiShellLib/UefiShellLib.c b/ShellPkg/Library/UefiShellLib/UefiShellLib.c
+index 0f605db..8931db6 100644
+--- a/ShellPkg/Library/UefiShellLib/UefiShellLib.c
++++ b/ShellPkg/Library/UefiShellLib/UefiShellLib.c
+@@ -427,6 +427,7 @@ ShellLibConstructor (
+   IN EFI_SYSTEM_TABLE  *SystemTable
+   )
+ {
++  EFI_STATUS  Status;
+   mEfiShellEnvironment2       = NULL;
+   gEfiShellProtocol           = NULL;
+   gEfiShellParametersProtocol = NULL;
+@@ -441,7 +442,18 @@ ShellLibConstructor (
+     return (EFI_SUCCESS);
+   }
+ 
+-  return (ShellLibConstructorWorker (ImageHandle, SystemTable));
++  //
++  // When linked into the UEFI Shell application itself, the Shell protocols are
++  // not installed yet at constructor time (the application installs them later
++  // in ShellAppMain and then calls ShellInitialize() to re-run this worker).
++  // Returning EFI_NOT_FOUND here would trip ASSERT_EFI_ERROR in DEBUG builds.
++  //
++  Status = ShellLibConstructorWorker (ImageHandle, SystemTable);
++  if (Status == EFI_NOT_FOUND) {
++    return (EFI_SUCCESS);
++  }
++
++  return (Status);
+ }
+ 
+ /**
+diff --git a/UefiCpuPkg/Library/ArmMmuLib/AArch64/ArmMmuLibCore.c b/UefiCpuPkg/Library/ArmMmuLib/AArch64/ArmMmuLibCore.c
+index 7d81c58..e24f1b3 100644
+--- a/UefiCpuPkg/Library/ArmMmuLib/AArch64/ArmMmuLibCore.c
++++ b/UefiCpuPkg/Library/ArmMmuLib/AArch64/ArmMmuLibCore.c
+@@ -206,9 +206,14 @@ ReplaceTableEntry (
+     {
+       DisableMmu = TRUE;
+       DEBUG ((DEBUG_WARN, "%a: splitting block entry with MMU disabled\n", __func__));
++      DEBUG ((DEBUG_ERROR, "P1\n"));
+     }
+ 
+     mReplaceLiveEntryFunc (Entry, Value, RegionStart, DisableMmu);
++
++    if (DisableMmu) {
++      DEBUG ((DEBUG_ERROR, "P2\n"));
++    }
+   }
+ }
+ 
+@@ -668,6 +673,10 @@ ArmSetMemoryAttributes (
+   UINT64  PageAttributes;
+   UINT64  PageAttributeMask;
+ 
++  if ((Attributes & EFI_MEMORY_CACHETYPE_MASK) == EFI_MEMORY_WC) {
++    DEBUG ((DEBUG_ERROR, "P0\n"));
++  }
++
+   PageAttributes    = GcdAttributeToPageAttribute (Attributes);
+   PageAttributeMask = 0;
+ 
+@@ -697,16 +706,24 @@ ArmSetMemoryAttributes (
+     }
+   }
+ 
+-  return UpdateRegionMapping (
+-           BaseAddress,
+-           Length,
+-           PageAttributes,
+-           PageAttributeMask,
+-           ArmGetTTBR0BaseAddress (),
+-           TRUE,
+-           ArmLpa2Enabled (),
+-           0
+-           );
++  EFI_STATUS  Status;
++
++  Status = UpdateRegionMapping (
++             BaseAddress,
++             Length,
++             PageAttributes,
++             PageAttributeMask,
++             ArmGetTTBR0BaseAddress (),
++             TRUE,
++             ArmLpa2Enabled (),
++             0
++             );
++
++  if ((Attributes & EFI_MEMORY_CACHETYPE_MASK) == EFI_MEMORY_WC) {
++    DEBUG ((DEBUG_ERROR, "P3b st=%x\n", Status));
++  }
++
++  return Status;
+ }
+ 
+ EFI_STATUS
+diff --git a/UefiCpuPkg/Library/CpuExceptionHandlerLib/AArch64/CpuExceptionHandlerLib.c b/UefiCpuPkg/Library/CpuExceptionHandlerLib/AArch64/CpuExceptionHandlerLib.c
+index 9116ba9..1e8a234 100644
+--- a/UefiCpuPkg/Library/CpuExceptionHandlerLib/AArch64/CpuExceptionHandlerLib.c
++++ b/UefiCpuPkg/Library/CpuExceptionHandlerLib/AArch64/CpuExceptionHandlerLib.c
+@@ -391,33 +391,19 @@ DumpCpuContext (
+   DEBUG ((DEBUG_ERROR, " X24 0x%016lx  X25 0x%016lx  X26 0x%016lx  X27 0x%016lx\n", SystemContext.SystemContextAArch64->X24, SystemContext.SystemContextAArch64->X25, SystemContext.SystemContextAArch64->X26, SystemContext.SystemContextAArch64->X27));
+   DEBUG ((DEBUG_ERROR, " X28 0x%016lx   FP 0x%016lx   LR 0x%016lx  \n", SystemContext.SystemContextAArch64->X28, SystemContext.SystemContextAArch64->FP, SystemContext.SystemContextAArch64->LR));
+ 
+-  /* We save these as 128bit numbers, but have to print them as two 64bit numbers,
+-     so swap the 64bit words to correctly represent a 128bit number.  */
+-  DEBUG ((DEBUG_ERROR, "\n  V0 0x%016lx %016lx   V1 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V0[1], SystemContext.SystemContextAArch64->V0[0], SystemContext.SystemContextAArch64->V1[1], SystemContext.SystemContextAArch64->V1[0]));
+-  DEBUG ((DEBUG_ERROR, "  V2 0x%016lx %016lx   V3 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V2[1], SystemContext.SystemContextAArch64->V2[0], SystemContext.SystemContextAArch64->V3[1], SystemContext.SystemContextAArch64->V3[0]));
+-  DEBUG ((DEBUG_ERROR, "  V4 0x%016lx %016lx   V5 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V4[1], SystemContext.SystemContextAArch64->V4[0], SystemContext.SystemContextAArch64->V5[1], SystemContext.SystemContextAArch64->V5[0]));
+-  DEBUG ((DEBUG_ERROR, "  V6 0x%016lx %016lx   V7 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V6[1], SystemContext.SystemContextAArch64->V6[0], SystemContext.SystemContextAArch64->V7[1], SystemContext.SystemContextAArch64->V7[0]));
+-  DEBUG ((DEBUG_ERROR, "  V8 0x%016lx %016lx   V9 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V8[1], SystemContext.SystemContextAArch64->V8[0], SystemContext.SystemContextAArch64->V9[1], SystemContext.SystemContextAArch64->V9[0]));
+-  DEBUG ((DEBUG_ERROR, " V10 0x%016lx %016lx  V11 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V10[1], SystemContext.SystemContextAArch64->V10[0], SystemContext.SystemContextAArch64->V11[1], SystemContext.SystemContextAArch64->V11[0]));
+-  DEBUG ((DEBUG_ERROR, " V12 0x%016lx %016lx  V13 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V12[1], SystemContext.SystemContextAArch64->V12[0], SystemContext.SystemContextAArch64->V13[1], SystemContext.SystemContextAArch64->V13[0]));
+-  DEBUG ((DEBUG_ERROR, " V14 0x%016lx %016lx  V15 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V14[1], SystemContext.SystemContextAArch64->V14[0], SystemContext.SystemContextAArch64->V15[1], SystemContext.SystemContextAArch64->V15[0]));
+-  DEBUG ((DEBUG_ERROR, " V16 0x%016lx %016lx  V17 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V16[1], SystemContext.SystemContextAArch64->V16[0], SystemContext.SystemContextAArch64->V17[1], SystemContext.SystemContextAArch64->V17[0]));
+-  DEBUG ((DEBUG_ERROR, " V18 0x%016lx %016lx  V19 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V18[1], SystemContext.SystemContextAArch64->V18[0], SystemContext.SystemContextAArch64->V19[1], SystemContext.SystemContextAArch64->V19[0]));
+-  DEBUG ((DEBUG_ERROR, " V20 0x%016lx %016lx  V21 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V20[1], SystemContext.SystemContextAArch64->V20[0], SystemContext.SystemContextAArch64->V21[1], SystemContext.SystemContextAArch64->V21[0]));
+-  DEBUG ((DEBUG_ERROR, " V22 0x%016lx %016lx  V23 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V22[1], SystemContext.SystemContextAArch64->V22[0], SystemContext.SystemContextAArch64->V23[1], SystemContext.SystemContextAArch64->V23[0]));
+-  DEBUG ((DEBUG_ERROR, " V24 0x%016lx %016lx  V25 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V24[1], SystemContext.SystemContextAArch64->V24[0], SystemContext.SystemContextAArch64->V25[1], SystemContext.SystemContextAArch64->V25[0]));
+-  DEBUG ((DEBUG_ERROR, " V26 0x%016lx %016lx  V27 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V26[1], SystemContext.SystemContextAArch64->V26[0], SystemContext.SystemContextAArch64->V27[1], SystemContext.SystemContextAArch64->V27[0]));
+-  DEBUG ((DEBUG_ERROR, " V28 0x%016lx %016lx  V29 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V28[1], SystemContext.SystemContextAArch64->V28[0], SystemContext.SystemContextAArch64->V29[1], SystemContext.SystemContextAArch64->V29[0]));
+-  DEBUG ((DEBUG_ERROR, " V30 0x%016lx %016lx  V31 0x%016lx %016lx\n", SystemContext.SystemContextAArch64->V30[1], SystemContext.SystemContextAArch64->V30[0], SystemContext.SystemContextAArch64->V31[1], SystemContext.SystemContextAArch64->V31[0]));
+-
+   DEBUG ((DEBUG_ERROR, "\n  SP 0x%016lx  ELR 0x%016lx  SPSR 0x%08lx  FPSR 0x%08lx\n ESR 0x%08lx          FAR 0x%016lx\n", SystemContext.SystemContextAArch64->SP, SystemContext.SystemContextAArch64->ELR, SystemContext.SystemContextAArch64->SPSR, SystemContext.SystemContextAArch64->FPSR, SystemContext.SystemContextAArch64->ESR, SystemContext.SystemContextAArch64->FAR));
+ 
+   DEBUG ((DEBUG_ERROR, "\n ESR : EC 0x%02x  IL 0x%x  ISS 0x%08x\n", (SystemContext.SystemContextAArch64->ESR & 0xFC000000) >> 26, (SystemContext.SystemContextAArch64->ESR >> 25) & 0x1, SystemContext.SystemContextAArch64->ESR & 0x1FFFFFF));
+ 
+   DescribeExceptionSyndrome (SystemContext.SystemContextAArch64->ESR);
+ 
++  //
++  // The screen only keeps the tail of this dump, so keep it short: the vector
++  // registers are rarely relevant and a 4-line stack window is enough. The
++  // image-name walk above is the valuable part and must stay on screen.
++  //
+   DEBUG ((DEBUG_ERROR, "\nStack dump:\n"));
+-  for (Offset = -256; Offset < 256; Offset += 32) {
++  for (Offset = -64; Offset < 64; Offset += 32) {
+     DEBUG ((
+       DEBUG_ERROR,
+       "%c %013lx: %016lx %016lx %016lx %016lx\n",
