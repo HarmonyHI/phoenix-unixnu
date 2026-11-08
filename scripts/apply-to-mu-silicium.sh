@@ -24,6 +24,9 @@ fi
 echo "==> overlay (new files)"
 cp -R "$HERE/overlay/." "$TARGET/"
 
+echo "==> device tree (appended to the boot image by mkinitrd.sh)"
+cp "$HERE/dtb/phoenix-initrd.dtb" "$TARGET/phoenix-initrd.dtb"
+
 echo "==> patch 0001: phoenixPkg + UniXNU wiring"
 git -C "$TARGET" apply --index "$HERE/patches/0001-mu-silicium-phoenix-port.patch"
 

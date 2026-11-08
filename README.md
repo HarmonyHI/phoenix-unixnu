@@ -65,31 +65,56 @@ overlay/                      Mu-Silicium 里的**新增**源码，保持原相�
 patches/
   0001-mu-silicium-phoenix-port.patch       对已跟踪文件的改动（dsc/fdf/APRIORI/MemoryMapLib/BootManager 等）
   0002-mu-basecore-flatten-pdbs-and-dump.patch  Mu_Basecore 的 12 个文件（详见下方说明）
-dts/                          MiCode phoenix-r-oss 设备树（SoC / 面板 / 触控 / pinctrl）
-scripts/apply-to-mu-silicium.sh 把 overlay + 补丁落到干净的上游树
+dts/                          MiCode phoenix-r-oss 设备树文本（SoC / 面板 / 触控 / pinctrl）
+dtb/phoenix-initrd.dtb        随镜像下发的设备树（唯一不可重建的输入，见 dtb/README.md）
+scripts/apply-to-mu-silicium.sh 把 overlay + 设备树 + 补丁落到干净的上游树
 ```
 
-## 复现
+## 从克隆到菜单
 
-前置：macOS + Xcode CLT、Python 3、`fastboot`、约 6 GiB 磁盘（固件构建产物）。
+克隆本仓库**本身还不能开机** —— 它只是一个"叠加层"，底下需要上游固件树、一份设备树、
+和一套能编 EDK2 的工具链。完整步骤如下，按顺序做能一次跑到 UniXNU 菜单。
+
+前置：macOS + Xcode CLT、Python 3、`fastboot`、Homebrew 的 LLVM 18 与 lld
+（`brew install llvm@18 lld`）、约 6 GiB 磁盘、能访问 GitHub（上游含 submodule）。
 
 ```sh
-# 1. 上游固件树（本项目基于此提交）
+# 1. 上游固件树（本项目基于此提交），连同 Mu_Basecore 子模块约 5 GiB（含各自 .git）
 git clone https://github.com/Project-Silicium/Mu-Silicium.git mu-silicium
 git -C mu-silicium checkout 8471e47f5248ebbffc2e6196b683204163efe155
 git -C mu-silicium submodule update --init --recursive   # Mu_Basecore @ 64f4789
-# Mu_Basecore 侧的改动见 patches/0002（不含本机专属的临时探针，见"刻意排除的东西"）
 
-# 2. 落地本仓库的内容
+# 2. 本仓库放在 firmware 旁边（apply 脚本用相对路径找它）
 git clone https://github.com/HarmonyHI/phoenix-unixnu.git
 ./phoenix-unixnu/scripts/apply-to-mu-silicium.sh mu-silicium
+#    └─ 铺 overlay 新文件（UniXNURamDiskDxe / PayloadTest / 脚本）
+#    └─ 放设备树 dtb/phoenix-initrd.dtb → mu-silicium/phoenix-initrd.dtb
+#    └─ 打 patches/0001（dsc / fdf / APRIORI / MemoryMapLib / BootManager）
 
-# 3. 构建：EFI → 打成 FAT → 嵌进固件 FV → mkbootimg
-cd mu-silicium && ./Resources/Scripts/build-phoenix.sh Mu-phoenix-adt.img
+# 3. 构建：pass1 出 EFI → 生成 ADT → 打成 FAT → pass2 把 FAT 压进固件 FV → mkbootimg
+cd mu-silicium && ./Resources/Scripts/build-phoenix.sh Mu-phoenix-menu.img
+#    约 1 分钟；末尾会打印 payload / ADT 校验 / checkfat / dtb 追加情况
 
-# 4. 只 RAM 启动，不刷分区
-fastboot boot Mu-phoenix-adt.img
+# 4. 只 RAM 启动，不写任何分区
+fastboot reboot-bootloader && sleep 6
+fastboot boot Mu-phoenix-menu.img
 ```
+
+屏幕应当出现 Apple logo、`version 0.1.0`、`config: \EFI\UniXNU\unixnu.toml`，以及四个条目
+（`phoenix ADT inspector` / `Hello payload` / `XNU kernel` / `Return to firmware`）。
+选第一项，会打印 8 行 `UNIXNU-ADT:` 并以 `RESULT PASS 6 passed 0 failed` 结尾。
+
+几个会挡路的细节：
+
+- `patches/0002`（Mu_Basecore 侧）**不自动应用**，apply 脚本只打 0001；要精简异常 dump 等
+  改动时手动 `git -C mu-silicium/Mu_Basecore apply`。不应用也能构建，只是 dump 更长。
+- `phoenix-initrd.dtb` 是唯一不可重建的输入（`dts/` 里的文件不完整，`sm7150.dtsi` 为空），
+  所以随仓库提供，见 `dtb/README.md`。
+- 打包脚本对 DTB 是硬检查；缺了不会静默产出镜像。缺 DTB 的症状是只打一行
+  `splitting block entry with MMU disabled` 就复位 —— 别误判成驱动问题。
+- `fastboot boot` 连续报 `Failed to load/authenticate boot image: Load Error` 时，
+  先 `fastboot reboot-bootloader` 再来；同一个 bootloader 会话里连收大镜像会被 ABL 拒绝。
+- `fastboot devices` 为空**不等于**固件在跑：也可能已经复位进 Android 了。
 
 ADT 工具可以脱离固件单独跑：
 
@@ -107,7 +132,7 @@ python3 port/scripts/make-phoenix-adt.py --output out/phoenix.adt --dram-size 0x
 | --- | --- |
 | `Build/`（269 MB）、`Binaries/`、`*.fd`、`*.efi` | 可重新构建 |
 | `Payload/payload.fat`（4 MB） | `build-phoenix.sh` 每次自动生成 |
-| `phoenix-trimmed.dtb`、`phoenix-debug-kernel`、`out/phoenix.adt` | 二进制中间产物 |
+| `phoenix-trimmed.dtb`、`phoenix-debug-kernel`、`out/phoenix.adt` | 原厂 kernel 镜像的提取物与中间产物；真正要用的设备树已固化进 `dtb/` |
 | `unixnu/` 上游源码树（24 MB） | 有独立上游，克隆即得；本仓库只留对它的移植结论 |
 | `UniXNU-sweet-main/`、`UniXNU-picasso-main/` | 第三方端口参考，不属于本次工作 |
 | Mu_Basecore 里 6 处临时探针（`P0`–`P5`、`GSA … ra=…`） | 黑屏排查时插的噪音打印，只在 `ArmMmuLibCore.c` / `CpuMmuCommon.c` / `Gcd.c`，不进补丁 |

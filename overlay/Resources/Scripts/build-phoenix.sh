@@ -16,7 +16,31 @@ cd "$ROOT"
 
 OUT="${1:-Mu-phoenix-payload.img}"
 FAT="Platforms/Xiaomi/phoenixPkg/Payload/payload.fat"
-PORT_DIR="${PHOENIX_PORT_DIR:-$ROOT/../UniXNU-phoenix-main}"
+
+#
+# The port tree (ADT generator) ships inside the phoenix-unixnu repository, but
+# this script also runs from a workspace where that tree was cloned next to the
+# firmware under its old name. Probe both instead of demanding an env var.
+#
+if [ -n "${PHOENIX_PORT_DIR:-}" ]; then
+  PORT_DIR="$PHOENIX_PORT_DIR"
+else
+  PORT_DIR=""
+  for candidate in "$ROOT/../phoenix-unixnu/port" "$ROOT/../UniXNU-phoenix-main"; do
+    if [ -f "$candidate/scripts/make-phoenix-adt.py" ]; then
+      PORT_DIR="$candidate"
+      break
+    fi
+  done
+  [ -n "$PORT_DIR" ] || PORT_DIR="$ROOT/../phoenix-unixnu/port"
+fi
+
+if [ ! -f "$ROOT/phoenix-initrd.dtb" ]; then
+  echo "error: phoenix-initrd.dtb missing at $ROOT" >&2
+  echo "       copy it from dtb/ in the phoenix-unixnu repository:" >&2
+  echo "       cp phoenix-unixnu/dtb/phoenix-initrd.dtb $ROOT/" >&2
+  exit 1
+fi
 
 export PATH="$ROOT/Mu_Basecore/BaseTools/BinWrappers/PosixLike:/opt/homebrew/Cellar/llvm@18/18.1.8/bin:/opt/homebrew/opt/lld/bin:/opt/homebrew/bin:$PATH"
 export EDK_TOOLS_BIN="$ROOT/Mu_Basecore/BaseTools"

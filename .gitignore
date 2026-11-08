@@ -13,5 +13,9 @@ Build/
 __pycache__/
 *.pyc
 
+# the device tree is a required *input* (not rebuildable from dts/), so it ships
+!dtb/
+!dtb/*.dtb
+
 # host noise
 .DS_Store
