@@ -116,11 +116,23 @@ MemoryMapLib 已含完整 SM7150 保留区表（DDR 起 `0x80000000`）：HYP/TZ
 - **阶段 C 可直接试 boot**：上游已支持 `fastboot boot` 通路（boot shim + header v1 + gzip），风险为零
 - ADT 生成：内存 bank 从 MemoryMapLib 取，GIC/PSCI/Timer 取 6.1 实测值（与 sweet 的 SM7150 ADT 交叉验证）
 
-## 7. 待办清单（下一步具体动作）
+## 7. 当前状态与下一步（2026-11-07 更新）
 
-- [ ] fork 上游 phoenixPkg，在 Mac 上跑通 Mu-Silicium 构建（产出 SILICIUM_UEFI.fd / boot.img）
-- [ ] 真机 `fastboot boot` 该 UEFI，验证菜单/日志（先用 USB CDC，再验证 GOP）
-- [ ] 用设备真实 DTB 替换占位 DTB（从内核 dts 编译或运行时提取）
-- [ ] 写 `make-phoenix-adt.py`（输入：MemoryMapLib + 6.1 参数）
-- [ ] 建 `UniXNU-phoenix` 设备仓库骨架并跑通 `unixnu status`
-- [ ] 确认 OS profile：ios-16.7.16-20H392（sweet 验证过）vs iPadOS 17.7.11（picasso 路线）
+**已完成，且全部在真机验证过**
+
+- [x] 上游 `phoenixPkg` 在 macOS 上编译通过，产出 `fastboot boot` 可用的 boot.img
+- [x] 真机 RAM 启动后出 UniXNU 菜单（Apple logo / `v0.1.0`），GOP 显示正常
+- [x] boot image 在 gzip 内核后追加设备树（缺这一步 SEC 死在 MMU 初始化）
+- [x] `make-phoenix-adt.py` / `check-phoenix-adt.py` / `tests/test-adt.py`（6 用例，3 负向）
+- [x] 载荷卷：4 MiB FAT 压缩进固件 FV（FFS FREEFORM + Tiano 压缩段），运行时
+      `ReadSection` 解压 → BlockIo → `ConnectController` → FatPkg → SimpleFileSystem
+- [x] `ADTInspector` 从载荷卷读回 `\EFI\UniXNU\phoenix.adt`（12,368 B），6 项检查全 PASS
+
+**下一步**
+
+1. 取真实 DRAM 上界（`adb shell cat /proc/meminfo`），用 `--dram-size` 重新生成 ADT
+   （当前是保守值 `0xFCC00000`）。
+2. XNU 内核本体：本地 `unixnu/` 构建系统 + `UniXNU-sweet-main` 模板（同为 SM7150），
+   XNU 10063.141.1、`ARM64_LINK_ADDR=0xfffffff007004000`，prelink 需要与本机 iOS 匹配的 kernelcache。
+3. 阶段 C 的口径按现实收紧：能打出 early boot 日志即算跨过内核入口；SpringBoard 依赖 Metal，
+   Adreno 618 上没有可行路径，不作为目标。
