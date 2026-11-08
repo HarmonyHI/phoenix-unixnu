@@ -13,8 +13,20 @@ fastboot boot boot.img
               └─ SpringBoard 之前的最后一块空地：真正的 XNU 内核（尚未构建）
 ```
 
-这个仓库只存**源码、补丁、脚本、文档**。固件树（Mu-Silicium）、XNU 源码树（unixnu）、
-任何 `.img` / `.fd` / `.efi` / `.fat` / `.dtb` 都不在这里 —— 它们要么能克隆，要么能重新构建。
+这个仓库只存**源码、补丁、脚本、文档**，外加**一个**二进制：`prebuilt/Mu-phoenix-fv6-menu.img`，
+那是真机上跑出菜单的那一版镜像，留给"想直接看效果、不想先搭工具链"的人。
+其余固件树（Mu-Silicium）、XNU 源码树（unixnu）、`Build/`、`*.fd` / `*.efi` / `*.fat`
+都不在这里 —— 它们要么能克隆，要么能重新构建。
+
+**只想看菜单**（免构建，约 1 分钟）：
+
+```sh
+git clone https://github.com/HarmonyHI/phoenix-unixnu.git && cd phoenix-unixnu
+fastboot reboot-bootloader && sleep 6
+fastboot boot prebuilt/Mu-phoenix-fv6-menu.img
+```
+
+镜像构成、校验和与限制见 [`prebuilt/README.md`](prebuilt/README.md)。
 
 ## 当前进度（2026-11-07）
 
@@ -67,10 +79,26 @@ patches/
   0002-mu-basecore-flatten-pdbs-and-dump.patch  Mu_Basecore 的 12 个文件（详见下方说明）
 dts/                          MiCode phoenix-r-oss 设备树文本（SoC / 面板 / 触控 / pinctrl）
 dtb/phoenix-initrd.dtb        随镜像下发的设备树（唯一不可重建的输入，见 dtb/README.md）
+prebuilt/                     **唯一入库的二进制**：真机验证过的 boot.img + 校验和与限制说明
 scripts/apply-to-mu-silicium.sh 把 overlay + 设备树 + 补丁落到干净的上游树
 ```
 
 ## 从克隆到菜单
+
+两条路。**A 路**是直接烧跑 `prebuilt/` 里的镜像，不需要工具链；**B 路**是从源码重建，
+验证这个仓库真的能产出能开机的固件。
+
+### A 路：用已验证镜像
+
+```sh
+fastboot devices && fastboot reboot-bootloader && sleep 6
+fastboot boot prebuilt/Mu-phoenix-fv6-menu.img
+```
+
+屏幕输出见下方「从克隆到菜单」末尾，以及 `prebuilt/README.md`。
+这条路只证明固件能跑；想改代码、调参数，走 B 路。
+
+### B 路：从源码重建
 
 克隆本仓库**本身还不能开机** —— 它只是一个"叠加层"，底下需要上游固件树、一份设备树、
 和一套能编 EDK2 的工具链。完整步骤如下，按顺序做能一次跑到 UniXNU 菜单。
@@ -130,7 +158,7 @@ python3 port/scripts/make-phoenix-adt.py --output out/phoenix.adt --dram-size 0x
 
 | 排除项 | 原因 |
 | --- | --- |
-| `Build/`（269 MB）、`Binaries/`、`*.fd`、`*.efi` | 可重新构建 |
+| `Build/`（269 MB）、`Binaries/`、`*.fd`、`*.efi`、`*.img` | 可重新构建。唯一例外是 `prebuilt/Mu-phoenix-fv6-menu.img`：它在实机上验证过，用作免构建的复现基线 |
 | `Payload/payload.fat`（4 MB） | `build-phoenix.sh` 每次自动生成 |
 | `phoenix-trimmed.dtb`、`phoenix-debug-kernel`、`out/phoenix.adt` | 原厂 kernel 镜像的提取物与中间产物；真正要用的设备树已固化进 `dtb/` |
 | `unixnu/` 上游源码树（24 MB） | 有独立上游，克隆即得；本仓库只留对它的移植结论 |
