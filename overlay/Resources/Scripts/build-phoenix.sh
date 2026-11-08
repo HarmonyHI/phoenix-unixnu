@@ -42,7 +42,39 @@ if [ ! -f "$ROOT/phoenix-initrd.dtb" ]; then
   exit 1
 fi
 
-export PATH="$ROOT/Mu_Basecore/BaseTools/BinWrappers/PosixLike:/opt/homebrew/Cellar/llvm@18/18.1.8/bin:/opt/homebrew/opt/lld/bin:/opt/homebrew/bin:$PATH"
+#
+# clang/lld: ask Homebrew where llvm@18 actually is instead of pinning a Cellar
+# path that only matches one machine (version suffixes differ, and Intel hosts
+# use /usr/local).
+#
+LLVM_BIN=""
+if command -v brew >/dev/null 2>&1; then
+  LLVM_PREFIX="$(brew --prefix llvm@18 2>/dev/null || true)"
+  if [ -n "$LLVM_PREFIX" ] && [ -x "$LLVM_PREFIX/bin/clang" ]; then
+    LLVM_BIN="$LLVM_PREFIX/bin"
+  fi
+fi
+if [ -z "$LLVM_BIN" ]; then
+  # `brew --prefix` returns the opt path even when the keg was never linked, so
+  # fall back to the Cellar payload as well (that is the case on this host).
+  for candidate in \
+    /opt/homebrew/opt/llvm@18/bin \
+    /usr/local/opt/llvm@18/bin \
+    /opt/homebrew/Cellar/llvm@18/*/bin \
+    /usr/local/Cellar/llvm@18/*/bin
+  do
+    if [ -x "$candidate/clang" ]; then
+      LLVM_BIN="$candidate"
+      break
+    fi
+  done
+fi
+if [ -z "$LLVM_BIN" ]; then
+  echo "error: llvm@18 not found (brew install llvm@18 lld)" >&2
+  exit 1
+fi
+
+export PATH="$ROOT/Mu_Basecore/BaseTools/BinWrappers/PosixLike:$LLVM_BIN:/opt/homebrew/opt/lld/bin:/usr/local/opt/lld/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 export EDK_TOOLS_BIN="$ROOT/Mu_Basecore/BaseTools"
 export WORKSPACE="$ROOT"
 # Post-build symbol flattening deletes stale PDBs, which hosts with a delete
