@@ -17,5 +17,10 @@ __pycache__/
 !dtb/
 !dtb/*.dtb
 
+# one binary is shipped on purpose: the image that was verified on the device,
+# so the bootable result can be reproduced without a toolchain
+!prebuilt/
+!prebuilt/*.img
+
 # host noise
 .DS_Store
