@@ -1,0 +1,115 @@
+diff --git a/ArmPkg/Drivers/CpuDxe/CpuMmuCommon.c b/ArmPkg/Drivers/CpuDxe/CpuMmuCommon.c
+index addcf76..4cd2096 100644
+--- a/ArmPkg/Drivers/CpuDxe/CpuMmuCommon.c
++++ b/ArmPkg/Drivers/CpuDxe/CpuMmuCommon.c
+@@ -301,6 +301,11 @@ CpuSetMemoryAttributes (
+     }
+ 
+     Status = ArmSetMemoryAttributes (BaseAddress, Length, EfiAttributes, 0);
++
++    if ((EfiAttributes & EFI_MEMORY_CACHETYPE_MASK) == EFI_MEMORY_WC) {
++      DEBUG ((DEBUG_ERROR, "P4 st=%x\n", Status));
++    }
++
+     if (EFI_ERROR (Status)) {
+       return Status;
+     }
+diff --git a/MdeModulePkg/Core/Dxe/Gcd/Gcd.c b/MdeModulePkg/Core/Dxe/Gcd/Gcd.c
+index e92d19c..0f11e96 100644
+--- a/MdeModulePkg/Core/Dxe/Gcd/Gcd.c
++++ b/MdeModulePkg/Core/Dxe/Gcd/Gcd.c
+@@ -1716,7 +1716,28 @@ CoreSetMemorySpaceAttributes (
+   DEBUG ((DEBUG_GCD, "GCD:SetMemorySpaceAttributes(Base=%016lx,Length=%016lx)\n", BaseAddress, Length));
+   DEBUG ((DEBUG_GCD, "  Attributes  = %016lx\n", Attributes));
+ 
+-  return CoreConvertSpace (GCD_SET_ATTRIBUTES_MEMORY_OPERATION, (EFI_GCD_MEMORY_TYPE)0, (EFI_GCD_IO_TYPE)0, BaseAddress, Length, 0, Attributes);
++  if ((Length < 0x10000) || ((Attributes & EFI_MEMORY_RO) != 0)) {
++    DEBUG ((
++      DEBUG_ERROR,
++      "GSA base=%016lx len=%016lx attr=%016lx ra=%016lx\n",
++      (UINT64)BaseAddress,
++      (UINT64)Length,
++      (UINT64)Attributes,
++      (UINT64)(UINTN)__builtin_return_address (0)
++      ));
++  }
++
++  {
++    EFI_STATUS  GsaStatus;
++
++    GsaStatus = CoreConvertSpace (GCD_SET_ATTRIBUTES_MEMORY_OPERATION, (EFI_GCD_MEMORY_TYPE)0, (EFI_GCD_IO_TYPE)0, BaseAddress, Length, 0, Attributes);
++
++    if ((Attributes & 0xFULL) == 0x2ULL) {
++      DEBUG ((DEBUG_ERROR, "P5 st=%x\n", GsaStatus));
++    }
++
++    return GsaStatus;
++  }
+ }
+ 
+ /**
+diff --git a/UefiCpuPkg/Library/ArmMmuLib/AArch64/ArmMmuLibCore.c b/UefiCpuPkg/Library/ArmMmuLib/AArch64/ArmMmuLibCore.c
+index 7d81c58..e24f1b3 100644
+--- a/UefiCpuPkg/Library/ArmMmuLib/AArch64/ArmMmuLibCore.c
++++ b/UefiCpuPkg/Library/ArmMmuLib/AArch64/ArmMmuLibCore.c
+@@ -206,9 +206,14 @@ ReplaceTableEntry (
+     {
+       DisableMmu = TRUE;
+       DEBUG ((DEBUG_WARN, "%a: splitting block entry with MMU disabled\n", __func__));
++      DEBUG ((DEBUG_ERROR, "P1\n"));
+     }
+ 
+     mReplaceLiveEntryFunc (Entry, Value, RegionStart, DisableMmu);
++
++    if (DisableMmu) {
++      DEBUG ((DEBUG_ERROR, "P2\n"));
++    }
+   }
+ }
+ 
+@@ -668,6 +673,10 @@ ArmSetMemoryAttributes (
+   UINT64  PageAttributes;
+   UINT64  PageAttributeMask;
+ 
++  if ((Attributes & EFI_MEMORY_CACHETYPE_MASK) == EFI_MEMORY_WC) {
++    DEBUG ((DEBUG_ERROR, "P0\n"));
++  }
++
+   PageAttributes    = GcdAttributeToPageAttribute (Attributes);
+   PageAttributeMask = 0;
+ 
+@@ -697,16 +706,24 @@ ArmSetMemoryAttributes (
+     }
+   }
+ 
+-  return UpdateRegionMapping (
+-           BaseAddress,
+-           Length,
+-           PageAttributes,
+-           PageAttributeMask,
+-           ArmGetTTBR0BaseAddress (),
+-           TRUE,
+-           ArmLpa2Enabled (),
+-           0
+-           );
++  EFI_STATUS  Status;
++
++  Status = UpdateRegionMapping (
++             BaseAddress,
++             Length,
++             PageAttributes,
++             PageAttributeMask,
++             ArmGetTTBR0BaseAddress (),
++             TRUE,
++             ArmLpa2Enabled (),
++             0
++             );
++
++  if ((Attributes & EFI_MEMORY_CACHETYPE_MASK) == EFI_MEMORY_WC) {
++    DEBUG ((DEBUG_ERROR, "P3b st=%x\n", Status));
++  }
++
++  return Status;
+ }
+ 
+ EFI_STATUS
